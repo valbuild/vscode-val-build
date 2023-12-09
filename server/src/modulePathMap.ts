@@ -24,7 +24,7 @@ export function getModulePathRange(
     if (!range) {
       break;
     }
-    range = range.children[pathSegment];
+    range = range?.children?.[pathSegment];
   }
   return (
     range?.start &&
