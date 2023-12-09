@@ -18,8 +18,13 @@ import {
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import { Service, ValModuleLoader, createService } from "@valbuild/server";
-import { ModuleId, ModulePath } from "@valbuild/core";
+import { Internal, ModuleId, ModulePath, SourcePath } from "@valbuild/core";
 import ts from "typescript";
+import {
+  ModulePathMap,
+  createModulePathMap as createModulePathMap,
+  getModulePathRange,
+} from "./modulePathMap";
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -154,13 +159,6 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   const text = textDocument.getText();
   // vs code extension get path of uri:
 
-  ts.createSourceFile(
-    uriToFsPath(textDocument.uri),
-    text,
-    ts.ScriptTarget.ES2015,
-    true
-  );
-
   const diagnostics: Diagnostic[] = [];
   if (service) {
     const { source, schema, errors } = await service.get(
@@ -170,16 +168,33 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
       "" as ModulePath
     );
     if (errors && errors.validation) {
-      Object.entries(errors.validation).forEach(([key, value]) => {
+      const modulePathMap = createModulePathMap(
+        ts.createSourceFile(
+          uriToFsPath(textDocument.uri),
+          text,
+          ts.ScriptTarget.ES2015,
+          true
+        )
+      );
+
+      Object.entries(errors.validation).forEach(([sourcePath, value]) => {
         if (value) {
           value.forEach((error) => {
-            const diagnostic: Diagnostic = {
-              severity: DiagnosticSeverity.Warning,
-              range: getSourcePathRange(key, textDocument),
-              message: error.message,
-              source: "val",
-            };
-            diagnostics.push(diagnostic);
+            const [_, modulePath] = Internal.splitModuleIdAndModulePath(
+              sourcePath as SourcePath
+            );
+            const range =
+              modulePathMap && getModulePathRange(modulePath, modulePathMap);
+            if (range) {
+              console.log({ range, error, modulePathMap });
+              const diagnostic: Diagnostic = {
+                severity: DiagnosticSeverity.Warning,
+                range,
+                message: error.message,
+                source: "val",
+              };
+              diagnostics.push(diagnostic);
+            }
           });
         }
       });
@@ -270,14 +285,3 @@ documents.listen(connection);
 
 // Listen on the connection
 connection.listen();
-
-function getSourcePathRange(path: string, textDocument: TextDocument) {
-  console.log(path);
-  const line = 48;
-  const start = 4;
-  const end = 8;
-  return {
-    start: { line, character: start },
-    end: { line, character: end },
-  };
-}
