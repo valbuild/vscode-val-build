@@ -83,7 +83,9 @@ connection.onInitialize(async (params: InitializeParams) => {
         console.log("Create Val Service for root: " + valRoot);
         const service = await createService(
           valRoot,
-          {},
+          {
+            disableCache: true,
+          },
           {
             ...ts.sys,
             readFile(path) {
