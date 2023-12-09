@@ -25,6 +25,8 @@ import {
   createModulePathMap as createModulePathMap,
   getModulePathRange,
 } from "./modulePathMap";
+import { glob } from "glob";
+import path from "path";
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -37,11 +39,11 @@ let hasConfigurationCapability = false;
 let hasWorkspaceFolderCapability = false;
 let hasDiagnosticRelatedInformationCapability = false;
 const cache = new Map<string, any>();
-let service: Service | null = null;
-createService("/home/freekh/Code/blank/blankno-v2/web", {}).then((s) => {
-  service = s;
-});
-connection.onInitialize((params: InitializeParams) => {
+let valRoots: string[] = [];
+let servicesByValRoot: {
+  [valRoot: string]: Service;
+} = {};
+connection.onInitialize(async (params: InitializeParams) => {
   const capabilities = params.capabilities;
 
   // Does the client support the `workspace/configuration` request?
@@ -56,6 +58,31 @@ connection.onInitialize((params: InitializeParams) => {
     capabilities.textDocument &&
     capabilities.textDocument.publishDiagnostics &&
     capabilities.textDocument.publishDiagnostics.relatedInformation
+  );
+
+  // TODO: we are using file directories etc at the FILE SYSTEM level. We could create a host FS for VS Code, but it was easier to use FS to get started
+  const valConfigFiles = [];
+  const packageJsonFiles = [];
+  for (const workspaceFolder of params.workspaceFolders || []) {
+    valConfigFiles.push(
+      ...(await glob(
+        `${uriToFsPath(workspaceFolder.uri)}/**/val.config.{t,j}s`,
+        {}
+      ))
+    );
+    packageJsonFiles.push(
+      ...(await glob(`${uriToFsPath(workspaceFolder.uri)}/**/package.json`, {}))
+    );
+  }
+  valRoots = getValRoots(valConfigFiles, packageJsonFiles);
+  servicesByValRoot = Object.fromEntries(
+    await Promise.all(
+      valRoots.map(async (valRoot) => {
+        console.log("Create Val Service for root: " + valRoot);
+        const service = await createService(valRoot, {});
+        return [valRoot, service];
+      })
+    )
   );
 
   const result: InitializeResult = {
@@ -75,6 +102,27 @@ connection.onInitialize((params: InitializeParams) => {
     };
   }
   return result;
+});
+
+function getValRoots(valConfigFiles: string[], packageJsonFiles: string[]) {
+  // find all package json files that have a val config files in a subdirectory
+  const valRoots = [];
+  for (const packageJsonFile of packageJsonFiles) {
+    if (
+      valConfigFiles.some((valConfigFile) =>
+        valConfigFile.startsWith(path.dirname(packageJsonFile))
+      )
+    ) {
+      valRoots.push(path.dirname(packageJsonFile));
+    }
+  }
+  return valRoots;
+}
+
+connection.onDidChangeWatchedFiles((params) => {
+  params.changes.forEach((change) => {
+    console.log(change);
+  });
 });
 
 connection.onInitialized(() => {
@@ -112,7 +160,7 @@ connection.onDidChangeConfiguration((change) => {
     documentSettings.clear();
   } else {
     globalSettings = <ExampleSettings>(
-      (change.settings.languageServerExample || defaultSettings)
+      (change.settings.valBuild || defaultSettings)
     );
   }
 
@@ -128,7 +176,7 @@ function getDocumentSettings(resource: string): Thenable<ExampleSettings> {
   if (!result) {
     result = connection.workspace.getConfiguration({
       scopeUri: resource,
-      section: "languageServerExample",
+      section: "valBuild",
     });
     documentSettings.set(resource, result);
   }
@@ -160,11 +208,19 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   // vs code extension get path of uri:
 
   const diagnostics: Diagnostic[] = [];
-  if (service) {
+  const fsPath = uriToFsPath(textDocument.uri);
+  const valRoot = valRoots?.find((valRoot) => fsPath.startsWith(valRoot));
+  const service = valRoot ? servicesByValRoot[valRoot] : undefined;
+  if (
+    valRoot &&
+    service &&
+    (fsPath.includes(".val.ts") || fsPath.includes(".val.js"))
+  ) {
     const { source, schema, errors } = await service.get(
-      textDocument.uri
-        .replace("file:///home/freekh/Code/blank/blankno-v2/web", "")
-        .replace(".val.ts", "") as ModuleId,
+      fsPath
+        .replace(valRoot, "")
+        .replace(".val.ts", "")
+        .replace(".val.js", "") as ModuleId,
       "" as ModulePath
     );
     if (errors && errors.validation) {
@@ -186,7 +242,6 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
             const range =
               modulePathMap && getModulePathRange(modulePath, modulePathMap);
             if (range) {
-              console.log({ range, error, modulePathMap });
               const diagnostic: Diagnostic = {
                 severity: DiagnosticSeverity.Warning,
                 range,

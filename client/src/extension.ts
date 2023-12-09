@@ -33,7 +33,10 @@ export function activate(context: ExtensionContext) {
 
   // Options to control the language client
   const clientOptions: LanguageClientOptions = {
-    documentSelector: [{ scheme: "file", language: "typescript" }],
+    documentSelector: [
+      { scheme: "file", language: "typescript" },
+      { scheme: "file", language: "javascript" },
+    ],
     synchronize: {
       fileEvents: workspace.createFileSystemWatcher(
         "**/*.val.t{s,s},**/val.config.{t,j}s"
@@ -43,8 +46,8 @@ export function activate(context: ExtensionContext) {
 
   // Create the language client and start the client.
   client = new LanguageClient(
-    "languageServerExample",
-    "Language Server Example",
+    "valBuild",
+    "Val Build IntelliSense",
     serverOptions,
     clientOptions
   );
