@@ -55,7 +55,37 @@ export function createModulePathMap(sourceFile: ts.SourceFile) {
 function traverse(node: ts.Expression, sourceFile: ts.SourceFile) {
   if (ts.isObjectLiteralExpression(node)) {
     return traverseObjectLiteral(node, sourceFile);
+  } else if (ts.isArrayLiteralExpression(node)) {
+    return traverseArrayLiteral(node, sourceFile);
   }
+}
+
+function traverseArrayLiteral(
+  node: ts.ArrayLiteralExpression,
+  sourceFile: ts.SourceFile
+): ModulePathMap {
+  return node.elements.reduce((acc, element, index) => {
+    if (ts.isExpression(element)) {
+      const tsEnd = sourceFile.getLineAndCharacterOfPosition(element.end);
+      const start = {
+        line: tsEnd.line,
+        character: tsEnd.character - element.getWidth(sourceFile),
+      };
+      const end = {
+        line: tsEnd.line,
+        character: tsEnd.character,
+      };
+      return {
+        ...acc,
+        [index]: {
+          children: traverse(element, sourceFile),
+          start,
+          end,
+        },
+      };
+    }
+    return acc;
+  }, {});
 }
 
 function traverseObjectLiteral(
@@ -82,9 +112,7 @@ function traverseObjectLiteral(
         return {
           ...acc,
           [key]: {
-            children: ts.isObjectLiteralExpression(value)
-              ? traverseObjectLiteral(value, sourceFile)
-              : {},
+            children: ts.isExpression(value) ? traverse(value, sourceFile) : {},
             start,
             end,
           },

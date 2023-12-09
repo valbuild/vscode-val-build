@@ -2,7 +2,7 @@ import ts from "typescript";
 import { createModulePathMap, getModulePathRange } from "./modulePathMap";
 
 describe("Should map source path to line / cols", () => {
-  test("test1", () => {
+  test("test 1", () => {
     const text = `import type { InferSchemaType } from '@valbuild/next';
 import { s, val } from '../val.config';
 
@@ -81,7 +81,7 @@ Dette er gøy!
     }
   });
 
-  test("test", () => {
+  test("test 2", () => {
     const text = `import { s, val } from '../val.config';
 
 const commons = {
@@ -122,6 +122,32 @@ export default val.content('/content/aboutUs', schema, {
     if (modulePathMap) {
       console.log(modulePathMap);
       console.log(getModulePathRange('"ingress"', modulePathMap));
+    }
+  });
+
+  test("test 3", () => {
+    const text = `import { s, val } from '../val.config';
+
+export const schema = s.object({
+  first: s.array(s.object({ second: s.record(s.array(s.string()))}))
+});
+
+export default val.content('/content', schema, {
+  first: [{ second: { a: ['a', 'b'] } }]
+});
+`;
+    const sourceFile = ts.createSourceFile(
+      "./content.val.ts",
+      text,
+      ts.ScriptTarget.ES2015
+    );
+
+    const modulePathMap = createModulePathMap(sourceFile);
+
+    if (modulePathMap) {
+      console.log(
+        getModulePathRange('"first".0."second"."a".1', modulePathMap)
+      );
     }
   });
 });
