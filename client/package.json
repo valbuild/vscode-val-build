@@ -13,6 +13,7 @@
     "vscode": "^1.75.0"
   },
   "dependencies": {
+    "image-size": "^1.0.2",
     "vscode-languageclient": "^8.1.0"
   },
   "devDependencies": {

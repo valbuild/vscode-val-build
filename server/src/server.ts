@@ -233,7 +233,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   const isValModule = fsPath.includes(".val.ts") || fsPath.includes(".val.js");
   if (valRoot && service && isValModule) {
     cache.set(fsPath, text);
-    const { errors } = await service.get(
+    const { source, schema, errors } = await service.get(
       fsPath
         .replace(valRoot, "")
         .replace(".val.ts", "")
@@ -285,17 +285,46 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
             const [_, modulePath] = Internal.splitModuleIdAndModulePath(
               sourcePath as SourcePath
             );
-            const range =
+            let range =
               modulePathMap && getModulePathRange(modulePath, modulePathMap);
-            if (range) {
+            if (range && modulePathMap) {
               // Skipping these for now, since we do not have hot fix yet
               if (!error.fixes?.includes("image:replace-metadata")) {
+                const addMetadataFix = error.fixes?.find(
+                  (fix) => fix === "image:add-metadata"
+                );
+
+                const metadataRange = getModulePathRange(
+                  modulePath + '."metadata"',
+                  modulePathMap
+                );
+
+                const refRange = getModulePathRange(
+                  modulePath + '."_ref"',
+                  modulePathMap
+                );
+                const valRange = getModulePathRange(
+                  modulePath + '."val"',
+                  modulePathMap
+                );
+                if (valRange && refRange && !metadataRange) {
+                  range = valRange;
+                }
+
                 const diagnostic: Diagnostic = {
                   severity: DiagnosticSeverity.Warning,
                   range,
                   message: error.message,
                   source: "val",
                 };
+                if (source && schema && addMetadataFix) {
+                  diagnostic.code = addMetadataFix;
+                  diagnostic.data = Internal.resolvePath(
+                    modulePath,
+                    source,
+                    schema
+                  );
+                }
                 diagnostics.push(diagnostic);
               }
             }

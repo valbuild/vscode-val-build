@@ -35,7 +35,9 @@ export function getModulePathRange(
   );
 }
 
-export function createModulePathMap(sourceFile: ts.SourceFile) {
+export function createModulePathMap(
+  sourceFile: ts.SourceFile
+): ModulePathMap | undefined {
   for (const child of sourceFile
     .getChildren()
     .flatMap((child) => child.getChildren())) {
@@ -52,11 +54,96 @@ export function createModulePathMap(sourceFile: ts.SourceFile) {
   }
 }
 
-function traverse(node: ts.Expression, sourceFile: ts.SourceFile) {
+function traverse(
+  node: ts.Expression,
+  sourceFile: ts.SourceFile
+): ModulePathMap | undefined {
+  if (ts.isStringLiteral(node) || ts.isNumericLiteral(node)) {
+    const tsEnd = sourceFile.getLineAndCharacterOfPosition(node.end);
+    const start = {
+      line: tsEnd.line,
+      character: tsEnd.character - node.getWidth(sourceFile),
+    };
+    const end = {
+      line: tsEnd.line,
+      character: tsEnd.character,
+    };
+    return {
+      "": {
+        children: {},
+        start,
+        end,
+      },
+    };
+  }
   if (ts.isObjectLiteralExpression(node)) {
     return traverseObjectLiteral(node, sourceFile);
-  } else if (ts.isArrayLiteralExpression(node)) {
+  }
+  if (ts.isArrayLiteralExpression(node)) {
     return traverseArrayLiteral(node, sourceFile);
+  }
+  if (ts.isCallExpression(node)) {
+    return traverseCallExpression(node, sourceFile);
+  }
+}
+
+function traverseCallExpression(
+  node: ts.CallExpression,
+  sourceFile: ts.SourceFile
+): ModulePathMap | undefined {
+  if (ts.isPropertyAccessExpression(node.expression)) {
+    if (
+      node.expression.expression.getText(sourceFile) === "val" &&
+      node.expression.name.getText(sourceFile) === "file"
+    ) {
+      const val = {
+        children: {},
+        start: sourceFile.getLineAndCharacterOfPosition(node.pos),
+        end: sourceFile.getLineAndCharacterOfPosition(node.end),
+      };
+      if (node.arguments[0]) {
+        const firstArgEnd = sourceFile.getLineAndCharacterOfPosition(
+          node.arguments[0].end
+        );
+        const _ref = {
+          children: {},
+          start: {
+            line: firstArgEnd.line,
+            character:
+              firstArgEnd.character - node.arguments[0].getWidth(sourceFile),
+          },
+          end: {
+            line: firstArgEnd.line,
+            character: firstArgEnd.character,
+          },
+        };
+        if (!node.arguments[1]) {
+          return {
+            val,
+            _ref,
+          };
+        }
+        const metadataEnd = sourceFile.getLineAndCharacterOfPosition(
+          node.arguments[1].end
+        );
+        return {
+          val,
+          _ref,
+          metadata: {
+            children: {},
+            start: {
+              line: metadataEnd.line,
+              character:
+                metadataEnd.character - node.arguments[1].getWidth(sourceFile),
+            },
+            end: {
+              line: metadataEnd.line,
+              character: metadataEnd.character,
+            },
+          },
+        };
+      }
+    }
   }
 }
 
@@ -112,7 +199,7 @@ function traverseObjectLiteral(
         return {
           ...acc,
           [key]: {
-            children: ts.isExpression(value) ? traverse(value, sourceFile) : {},
+            children: traverse(value, sourceFile),
             start,
             end,
           },
