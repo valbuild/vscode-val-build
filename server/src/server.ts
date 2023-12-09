@@ -27,6 +27,8 @@ import {
 } from "./modulePathMap";
 import { glob } from "glob";
 import path from "path";
+import fs from "fs";
+import { stackToLine } from "./stackToLine";
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -79,7 +81,22 @@ connection.onInitialize(async (params: InitializeParams) => {
     await Promise.all(
       valRoots.map(async (valRoot) => {
         console.log("Create Val Service for root: " + valRoot);
-        const service = await createService(valRoot, {});
+        const service = await createService(
+          valRoot,
+          {},
+          {
+            ...ts.sys,
+            readFile(path) {
+              if (cache.has(path)) {
+                return cache.get(path);
+              }
+              const content = fs.readFileSync(path, "utf8");
+              cache.set(path, content);
+              return content;
+            },
+            writeFile: fs.writeFileSync,
+          }
+        );
         return [valRoot, service];
       })
     )
@@ -211,18 +228,45 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   const fsPath = uriToFsPath(textDocument.uri);
   const valRoot = valRoots?.find((valRoot) => fsPath.startsWith(valRoot));
   const service = valRoot ? servicesByValRoot[valRoot] : undefined;
-  if (
-    valRoot &&
-    service &&
-    (fsPath.includes(".val.ts") || fsPath.includes(".val.js"))
-  ) {
-    const { source, schema, errors } = await service.get(
+  const isValModule = fsPath.includes(".val.ts") || fsPath.includes(".val.js");
+  if (valRoot && service && isValModule) {
+    cache.set(fsPath, text);
+    const { errors } = await service.get(
       fsPath
         .replace(valRoot, "")
         .replace(".val.ts", "")
         .replace(".val.js", "") as ModuleId,
       "" as ModulePath
     );
+    console.log(JSON.stringify({ errors }, null, 2));
+
+    if (errors && errors.fatal) {
+      errors.fatal.forEach((error) => {
+        if (error.stack) {
+          const maybeLine = stackToLine(fsPath, error.stack);
+          if (maybeLine !== undefined) {
+            const line = Math.max(maybeLine - 1, 0);
+            const diagnostic: Diagnostic = {
+              severity: DiagnosticSeverity.Error,
+              range: {
+                start: {
+                  line,
+                  character: 0,
+                },
+                end: {
+                  line,
+                  character: 1000,
+                },
+              },
+              message: error.message,
+              source: "val",
+            };
+            diagnostics.push(diagnostic);
+          }
+        }
+      });
+    }
+
     if (errors && errors.validation) {
       const modulePathMap = createModulePathMap(
         ts.createSourceFile(
@@ -242,13 +286,16 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
             const range =
               modulePathMap && getModulePathRange(modulePath, modulePathMap);
             if (range) {
-              const diagnostic: Diagnostic = {
-                severity: DiagnosticSeverity.Warning,
-                range,
-                message: error.message,
-                source: "val",
-              };
-              diagnostics.push(diagnostic);
+              // Skipping these for now, since we do not have hot fix yet
+              if (!error.fixes?.includes("image:replace-metadata")) {
+                const diagnostic: Diagnostic = {
+                  severity: DiagnosticSeverity.Warning,
+                  range,
+                  message: error.message,
+                  source: "val",
+                };
+                diagnostics.push(diagnostic);
+              }
             }
           });
         }
