@@ -142,6 +142,7 @@ function getImageMetadata(imageFilename: string, document: vscode.Uri) {
           return {
             width: res.width,
             height: res.height,
+            mimeType: `image/${res.type}`,
             sha256: getSHA256Hash(
               textEncoder.encode(
                 `data:${mimeTypeToFileExt(
