@@ -19,6 +19,7 @@ import { match } from "assert";
 import { get } from "http";
 import { getSHA256Hash } from "./getSha256";
 import { TextEncoder } from "util";
+import * as ts from "typescript";
 
 let client: LanguageClient;
 
@@ -104,20 +105,81 @@ export class ValActionProvider implements vscode.CodeActionProvider {
         );
 
         fix.edit = new vscode.WorkspaceEdit();
-        const matches = document
-          .getText(diag.range)
-          .match(/('|"|`)(.*)('|"|`)/); // TODO: this reg ex could be improved. Also is there a better way to get the data?
-        if (!matches && matches[2]) {
-          continue;
-        }
-        const metadata = getImageMetadata(matches[2], document.uri);
-        if (metadata) {
-          fix.edit.insert(
-            document.uri,
-            diag.range.end.translate(0, -1),
-            `,${JSON.stringify(metadata)}`
-          );
-          actions.push(fix);
+        const sourceFile = ts.createSourceFile(
+          "<synthetic-source-file>",
+          document.getText(diag.range),
+          ts.ScriptTarget.ES2015,
+          true,
+          ts.ScriptKind.TSX
+        );
+
+        let newCallExpression: ts.CallExpression;
+        const transformerFactory: ts.TransformerFactory<ts.SourceFile> = (
+          context
+        ) => {
+          return (sourceFile) => {
+            const visitor = (node: ts.Node): ts.Node => {
+              if (ts.isCallExpression(node)) {
+                const firstArg = node.arguments[0];
+                if (ts.isStringLiteral(firstArg) && !node.arguments[1]) {
+                  const metadata = getImageMetadata(
+                    firstArg.text,
+                    document.uri
+                  );
+
+                  newCallExpression = ts.factory.updateCallExpression(
+                    node,
+                    node.expression,
+                    undefined,
+                    [
+                      node.arguments[0],
+                      ts.factory.createObjectLiteralExpression([
+                        ts.factory.createPropertyAssignment(
+                          ts.factory.createIdentifier("width"),
+                          ts.factory.createNumericLiteral(
+                            metadata.width.toString()
+                          )
+                        ),
+                        ts.factory.createPropertyAssignment(
+                          ts.factory.createIdentifier("height"),
+                          ts.factory.createNumericLiteral(
+                            metadata.height.toString()
+                          )
+                        ),
+                        ts.factory.createPropertyAssignment(
+                          ts.factory.createIdentifier("sha256"),
+                          ts.factory.createStringLiteral(metadata.sha256)
+                        ),
+                      ]),
+                    ]
+                  );
+                  return newCallExpression;
+                }
+              }
+              return ts.visitEachChild(node, visitor, context);
+            };
+
+            return ts.visitNode(sourceFile, visitor) as ts.SourceFile;
+          };
+        };
+        const printer = ts.createPrinter();
+        const result = ts.transform(sourceFile, [transformerFactory]);
+        if (newCallExpression) {
+          let newNodeText = printer
+            .printNode(
+              ts.EmitHint.Unspecified,
+              result.transformed[0],
+              result.transformed[0]
+            )
+            .trim();
+          newNodeText =
+            newNodeText && newNodeText.slice(-1) === ";"
+              ? newNodeText.slice(0, -1) // trim trailing semicolon if exists (seems to be the case?)
+              : newNodeText;
+          if (newNodeText) {
+            fix.edit.replace(document.uri, diag.range, newNodeText);
+            actions.push(fix);
+          }
         }
       }
     }
@@ -165,4 +227,42 @@ export function mimeTypeToFileExt(type: string) {
     return "image/vnd.microsoft.icon";
   }
   return `image/${type}`;
+}
+
+/**
+ *
+ * From: https://github.com/ajafff/tsutils/blob/11da31212257466a2164ca978b782139ca3f38f5/util/util.ts#L151
+ */
+
+function getTokenAtPosition(
+  parent: ts.Node,
+  pos: number,
+  sourceFile?: ts.SourceFile
+) {
+  if (pos < parent.pos || pos >= parent.end) return;
+  if (isTokenKind(parent.kind)) return parent;
+  if (sourceFile === undefined) sourceFile = parent.getSourceFile();
+  return getTokenAtPositionWorker(parent, pos, sourceFile);
+}
+
+function getTokenAtPositionWorker(
+  node: ts.Node,
+  pos: number,
+  sourceFile: ts.SourceFile
+) {
+  outer: while (true) {
+    for (const child of node.getChildren(sourceFile)) {
+      if (child.end > pos && child.kind !== ts.SyntaxKind.JSDocComment) {
+        if (isTokenKind(child.kind)) return child;
+        // next token is nested in another node
+        node = child;
+        continue outer;
+      }
+    }
+    return;
+  }
+}
+
+function isTokenKind(kind: ts.SyntaxKind) {
+  return kind >= ts.SyntaxKind.FirstToken && kind <= ts.SyntaxKind.LastToken;
 }

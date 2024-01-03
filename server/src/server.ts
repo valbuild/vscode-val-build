@@ -210,7 +210,7 @@ documents.onDidClose((e) => {
 // The content of a text document has changed. This event is emitted
 // when the text document first opened or when its content has changed.
 documents.onDidChangeContent((change) => {
-  validateTextDocument(change.document);
+  return validateTextDocument(change.document);
 });
 
 function uriToFsPath(uri: string): string {
@@ -231,8 +231,14 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   const valRoot = valRoots?.find((valRoot) => fsPath.startsWith(valRoot));
   const service = valRoot ? servicesByValRoot[valRoot] : undefined;
   const isValModule = fsPath.includes(".val.ts") || fsPath.includes(".val.js");
-  if (valRoot && service && isValModule) {
+  const isValRelatedFile =
+    isValModule ||
+    fsPath.includes("val.config.ts") ||
+    fsPath.includes("val.config.js");
+  if (isValRelatedFile) {
     cache.set(fsPath, text);
+  }
+  if (valRoot && service && isValModule) {
     const { source, schema, errors } = await service.get(
       fsPath
         .replace(valRoot, "")
@@ -240,10 +246,8 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
         .replace(".val.js", "") as ModuleId,
       "" as ModulePath
     );
-    console.log(JSON.stringify({ errors }, null, 2));
-
     if (errors && errors.fatal) {
-      errors.fatal.forEach((error) => {
+      for (const error of errors.fatal || []) {
         if (error.stack) {
           const maybeLine = stackToLine(fsPath, error.stack);
           if (maybeLine !== undefined) {
@@ -266,9 +270,8 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
             diagnostics.push(diagnostic);
           }
         }
-      });
+      }
     }
-
     if (errors && errors.validation) {
       const modulePathMap = createModulePathMap(
         ts.createSourceFile(
@@ -279,7 +282,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
         )
       );
 
-      Object.entries(errors.validation).forEach(([sourcePath, value]) => {
+      for (const [sourcePath, value] of Object.entries(errors.validation)) {
         if (value) {
           value.forEach((error) => {
             const [_, modulePath] = Internal.splitModuleIdAndModulePath(
@@ -288,29 +291,19 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
             let range =
               modulePathMap && getModulePathRange(modulePath, modulePathMap);
             if (range && modulePathMap) {
+              const valRange = getModulePathRange(
+                modulePath + '."val"',
+                modulePathMap
+              );
+              if (valRange) {
+                range = valRange;
+              }
+
               // Skipping these for now, since we do not have hot fix yet
               if (!error.fixes?.includes("image:replace-metadata")) {
                 const addMetadataFix = error.fixes?.find(
                   (fix) => fix === "image:add-metadata"
                 );
-
-                const metadataRange = getModulePathRange(
-                  modulePath + '."metadata"',
-                  modulePathMap
-                );
-
-                const refRange = getModulePathRange(
-                  modulePath + '."_ref"',
-                  modulePathMap
-                );
-                const valRange = getModulePathRange(
-                  modulePath + '."val"',
-                  modulePathMap
-                );
-                if (valRange && refRange && !metadataRange) {
-                  range = valRange;
-                }
-
                 const diagnostic: Diagnostic = {
                   severity: DiagnosticSeverity.Warning,
                   range,
@@ -319,55 +312,21 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                 };
                 if (source && schema && addMetadataFix) {
                   diagnostic.code = addMetadataFix;
-                  diagnostic.data = Internal.resolvePath(
-                    modulePath,
-                    source,
-                    schema
-                  );
+                  // Can't access
+                  // diagnostic.data = Internal.resolvePath(
+                  //   modulePath,
+                  //   source,
+                  //   schema
+                  // );
                 }
                 diagnostics.push(diagnostic);
               }
             }
           });
         }
-      });
+      }
     }
   }
-  // const pattern = /\b[A-Z]{2,}\b/g;
-  // let m: RegExpExecArray | null;
-
-  // let problems = 0;
-  // while ((m = pattern.exec(text)) && problems < settings.maxNumberOfProblems) {
-  // 	problems++;
-  // 	const diagnostic: Diagnostic = {
-  // 		severity: DiagnosticSeverity.Warning,
-  // 		range: {
-  // 			start: textDocument.positionAt(m.index),
-  // 			end: textDocument.positionAt(m.index + m[0].length)
-  // 		},
-  // 		message: `${m[0]} is all uppercase.`,
-  // 		source: 'ex'
-  // 	};
-  // 	if (hasDiagnosticRelatedInformationCapability) {
-  // 		diagnostic.relatedInformation = [
-  // 			{
-  // 				location: {
-  // 					uri: textDocument.uri,
-  // 					range: Object.assign({}, diagnostic.range)
-  // 				},
-  // 				message: 'Spelling matters'
-  // 			},
-  // 			{
-  // 				location: {
-  // 					uri: textDocument.uri,
-  // 					range: Object.assign({}, diagnostic.range)
-  // 				},
-  // 				message: 'Particularly for names'
-  // 			}
-  // 		];
-  // 	}
-  // 	diagnostics.push(diagnostic);
-  // }
 
   // Send the computed diagnostics to VSCode.
   connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });

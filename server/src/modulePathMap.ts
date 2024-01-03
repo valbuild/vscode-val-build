@@ -98,8 +98,10 @@ function traverseCallExpression(
     ) {
       const val = {
         children: {},
-        start: sourceFile.getLineAndCharacterOfPosition(node.pos),
-        end: sourceFile.getLineAndCharacterOfPosition(node.end),
+        start: sourceFile.getLineAndCharacterOfPosition(
+          node.getStart(sourceFile)
+        ), // TODO: We do + 1 to line up the diagnostics error exactly below a normal
+        end: sourceFile.getLineAndCharacterOfPosition(node.getEnd()),
       };
       if (node.arguments[0]) {
         const firstArgEnd = sourceFile.getLineAndCharacterOfPosition(
@@ -186,7 +188,7 @@ function traverseObjectLiteral(
       const value = property.initializer;
       if (key) {
         const tsEnd = sourceFile.getLineAndCharacterOfPosition(
-          property.name.end
+          property.name.getEnd()
         );
         const start = {
           line: tsEnd.line,
@@ -196,10 +198,22 @@ function traverseObjectLiteral(
           line: tsEnd.line,
           character: tsEnd.character,
         };
+        const val = {
+          children: {},
+          start: sourceFile.getLineAndCharacterOfPosition(
+            property.initializer.getStart(sourceFile)
+          ),
+          end: sourceFile.getLineAndCharacterOfPosition(
+            property.initializer.getEnd()
+          ),
+        };
         return {
           ...acc,
           [key]: {
-            children: traverse(value, sourceFile),
+            children: {
+              val,
+              ...traverse(value, sourceFile),
+            },
             start,
             end,
           },
