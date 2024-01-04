@@ -300,9 +300,13 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
               }
 
               // Skipping these for now, since we do not have hot fix yet
-              if (!error.fixes?.includes("image:replace-metadata")) {
+              if (
+                !error.fixes?.includes("image:replace-metadata") &&
+                !error.fixes?.includes("file:check-metadata")
+              ) {
                 const addMetadataFix = error.fixes?.find(
-                  (fix) => fix === "image:add-metadata"
+                  (fix) =>
+                    fix === "image:add-metadata" || fix === "file:add-metadata"
                 );
                 const diagnostic: Diagnostic = {
                   severity: DiagnosticSeverity.Warning,
