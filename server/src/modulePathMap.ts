@@ -93,7 +93,7 @@ function traverseCallExpression(
 ): ModulePathMap | undefined {
   if (ts.isPropertyAccessExpression(node.expression)) {
     if (
-      node.expression.expression.getText(sourceFile) === "val" &&
+      node.expression.expression.getText(sourceFile) === "c" &&
       node.expression.name.getText(sourceFile) === "file"
     ) {
       const val = {
