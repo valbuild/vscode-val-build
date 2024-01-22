@@ -13,10 +13,8 @@ import {
   TransportKind,
 } from "vscode-languageclient/node";
 import * as vscode from "vscode";
-import { fstatSync, readFileSync } from "fs";
+import { readFileSync } from "fs";
 import sizeOf from "image-size";
-import { match } from "assert";
-import { get } from "http";
 import { getSHA256Hash } from "./getSha256";
 import { TextEncoder } from "util";
 import * as ts from "typescript";
