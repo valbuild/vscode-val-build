@@ -195,7 +195,7 @@ function getImageMetadata(imageFilename: string, document: vscode.Uri) {
     vscode.workspace.getWorkspaceFolder(document).uri.fsPath;
   let iterations = 0;
   // TODO: this can't be the best way to find the root of the project we are in?
-  while (workspaceFolder !== path.dirname(rootPath) && iterations < 100) {
+  while (workspaceFolder !== rootPath && iterations < 100) {
     rootPath = path.dirname(rootPath);
     iterations++;
     try {
