@@ -13,7 +13,7 @@ The LSP server is responsible for validating contents. The VS Code client is res
 
 ## Contributing
 
-### Running the Sample
+### Running the VS Code plugin
 
 - Run `npm install` in this folder. This installs all necessary npm modules in both the client and server folder
 - Open VS Code on this folder.
