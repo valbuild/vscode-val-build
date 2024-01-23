@@ -1,31 +1,19 @@
-# LSP Example
+# Val Build IntelliSense
 
-Heavily documented sample code for <https://code.visualstudio.com/api/language-extensions/language-server-extension-guide>
+This VS Code plugin gives you IntelliSense in your .val files, e.g.:
+- shows validation errors / warnings
+- provides hot fixes
 
-## Functionality
-
-This Language Server works for plain text file. It has the following language features:
-
-- Completions
-- Diagnostics regenerated on each file change or configuration change
-
-It also includes an End-to-End test.
 
 ## Structure
 
-```
-.
-├── client // Language Client
-│   ├── src
-│   │   ├── test // End to End tests for Language Client / Server
-│   │   └── extension.ts // Language Client entry point
-├── package.json // The extension manifest.
-└── server // Language Server
-    └── src
-        └── server.ts // Language Server entry point
-```
+This project is split into 2 parts: a LSP server and a VS Code client.
 
-## Running the Sample
+The LSP server is responsible for validating contents. The VS Code client is responsible for hot fixes.
+
+## Contributing
+
+### Running the Sample
 
 - Run `npm install` in this folder. This installs all necessary npm modules in both the client and server folder
 - Open VS Code on this folder.
