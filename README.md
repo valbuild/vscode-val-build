@@ -1,24 +1,23 @@
 # Val Build IntelliSense
 
-This VS Code plugin gives you IntelliSense in your .val files, e.g.:
-- shows validation errors / warnings
-- provides hot fixes
+Val Build IntelliSense improves the Val development experience by providing Visual Studio Code users with advanced features such as validation errors, warnings and hot fixes.
 
+## Installation
 
-## Structure
+**[Install via the Visual Studio Code Marketplace →](https://marketplace.visualstudio.com/items?itemName=valbuild.vscode-val-build)**
 
-This project is split into 2 parts: a LSP server and a VS Code client.
+In order for the extension to activate you must have [`Val` installed](https://val.build/docs/getting-started/installation).
 
-The LSP server is responsible for validating contents. The VS Code client is responsible for hot fixes.
+## Features
 
-## Contributing
+### Validation errors
 
-### Running the VS Code plugin
+View validation errors right in VS Code.
 
-- Run `npm install` in this folder. This installs all necessary npm modules in both the client and server folder
-- Open VS Code on this folder.
-- Press Ctrl+Shift+B to start compiling the client and server in [watch mode](https://code.visualstudio.com/docs/editor/tasks#:~:text=The%20first%20entry%20executes,the%20HelloWorld.js%20file.).
-- Switch to the Run and Debug View in the Sidebar (Ctrl+Shift+D).
-- Select `Launch Client` from the drop down (if it is not already).
-- Press ▷ to run the launch config (F5).
-- In the [Extension Development Host](https://code.visualstudio.com/api/get-started/your-first-extension#:~:text=Then%2C%20inside%20the%20editor%2C%20press%20F5.%20This%20will%20compile%20and%20run%20the%20extension%20in%20a%20new%20Extension%20Development%20Host%20window.) instance of VSCode, open .val.{js,ts} file.
+<img src="https://raw.githubusercontent.com/valbuild/vscode-val-build/master/.github/validation_errors.gif" alt="" />
+
+### Apply hot fixes
+
+Apply hot fixes on validation errors right from VS Code.
+
+<img src="https://raw.githubusercontent.com/valbuild/vscode-val-build/master/.github/hotfixes.gif" alt="" />

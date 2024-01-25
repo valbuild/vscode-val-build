@@ -1,10 +1,13 @@
 {
   "name": "vscode-val-build-client",
-  "description": "Val Build VSCCode client",
+  "displayName": "Val Build IntelliSense",
+  "description": "Val Build client",
   "author": "Val Build",
   "license": "MIT",
   "version": "0.0.1",
   "publisher": "valbuild",
+  "homepage": "https://github.com/valbuild/vscode-val-build",
+  "icon": "media/icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/valbuild/vscode-val-build"
