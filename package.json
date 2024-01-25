@@ -1,9 +1,9 @@
 {
   "name": "vscode-val-build",
-  "description": "Val Build Content IntelliSense",
+  "description": "Val Build IntelliSense",
   "author": "Val Build",
   "license": "MIT",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "repository": {
     "type": "git",
     "url": "https://github.com/valbuild/vscode-val-build"
