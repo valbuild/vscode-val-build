@@ -13,14 +13,14 @@
     "url": "https://github.com/valbuild/vscode-val-build"
   },
   "engines": {
-    "vscode": "^1.75.0"
+    "vscode": "^1.85.0"
   },
   "dependencies": {
     "image-size": "^1.0.2",
     "vscode-languageclient": "^8.1.0"
   },
   "devDependencies": {
-    "@types/vscode": "^1.75.1",
+    "@types/vscode": "^1.85.0",
     "@vscode/test-electron": "^2.2.3"
   }
 }

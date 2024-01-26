@@ -15,8 +15,8 @@
     "@valbuild/core": "^0.58.0",
     "@valbuild/server": "^0.58.0",
     "glob": "^10.3.10",
-    "vscode-languageserver": "^8.1.0",
-    "vscode-languageserver-textdocument": "^1.0.8"
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.11"
   },
   "scripts": {},
   "devDependencies": {
