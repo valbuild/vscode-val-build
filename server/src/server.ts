@@ -72,7 +72,7 @@ connection.onInitialize(async (params: InitializeParams) => {
   servicesByValRoot = Object.fromEntries(
     await Promise.all(
       valRoots.map(async (valRoot) => {
-        console.log("Creating Val Service for root: " + valRoot + "...");
+        console.log("Initializing Val Service for: '" + valRoot + "'...");
         const service = await createService(
           valRoot,
           {
@@ -91,6 +91,7 @@ connection.onInitialize(async (params: InitializeParams) => {
             writeFile: fs.writeFileSync,
           }
         );
+        console.log("Created Val Service! Root: '" + valRoot + "'");
         return [valRoot, service];
       })
     )
@@ -211,8 +212,7 @@ function uriToFsPath(uri: string): string {
 }
 
 async function validateTextDocument(textDocument: TextDocument): Promise<void> {
-  // In this simple example we get the settings for every validate run.
-  const settings = await getDocumentSettings(textDocument.uri);
+  // const settings = await getDocumentSettings(textDocument.uri);
 
   // The validator creates diagnostics for all uppercase words length 2 and more
   const text = textDocument.getText();
@@ -273,7 +273,6 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
           true
         )
       );
-      console.log(modulePathMap, uriToFsPath(textDocument.uri));
 
       for (const [sourcePath, value] of Object.entries(errors.validation)) {
         if (value) {

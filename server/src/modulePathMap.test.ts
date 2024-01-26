@@ -130,7 +130,7 @@ export default c.define('/content/aboutUs', schema, {
     assert(!!modulePathMap, "modulePathMap is undefined");
 
     console.log(modulePathMap);
-    console.log(getModulePathRange('"ingress"', modulePathMap));
+    // console.log(getModulePathRange('"ingress"', modulePathMap));
     assert.deepStrictEqual(getModulePathRange('"ingress"', modulePathMap), {
       start: { line: 15, character: 2 },
       end: { line: 15, character: 9 },
@@ -157,13 +157,52 @@ export default c.define('/content', schema, {
     const modulePathMap = createModulePathMap(sourceFile);
     assert(!!modulePathMap, "modulePathMap is undefined");
 
-    console.log(getModulePathRange('"first".0."second"."a".1', modulePathMap));
+    // console.log(getModulePathRange('"first".0."second"."a".1', modulePathMap));
     assert.deepStrictEqual(
       getModulePathRange('"first".0."second"."a".1', modulePathMap),
       {
         start: { line: 7, character: 31 },
         end: { line: 7, character: 34 },
       }
+    );
+  });
+
+  test("test 4: string literal object properties", () => {
+    const text = `import { c } from "../../val.config";
+import { docsSchema } from "./docsSchema.val";
+
+export default c.define("/app/docs/docs", docsSchema, {
+  "getting-started": {
+    title: "Getting started",
+    content: c.richtext\`
+Text
+\`,
+    subPages: {
+      installation: {
+        title: "Installation",
+        subPagesL2: null,
+        content: null,
+      },
+    },
+  },
+});    
+`;
+
+    const sourceFile = ts.createSourceFile(
+      "./content.val.ts",
+      text,
+      ts.ScriptTarget.ES2015
+    );
+
+    const modulePathMap = createModulePathMap(sourceFile);
+    assert(!!modulePathMap, "modulePathMap is undefined");
+    // console.log(JSON.stringify(modulePathMap, null, 2));
+    assert.deepStrictEqual(
+      getModulePathRange(
+        '"getting-started"."subPages"."installation"',
+        modulePathMap
+      ),
+      { end: { character: 18, line: 10 }, start: { character: 6, line: 10 } }
     );
   });
 });

@@ -184,7 +184,9 @@ function traverseObjectLiteral(
   return node.properties.reduce((acc, property) => {
     if (ts.isPropertyAssignment(property)) {
       const key =
-        property.name && ts.isIdentifier(property.name) && property.name.text;
+        property.name &&
+        (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) &&
+        property.name.text;
       const value = property.initializer;
       if (key) {
         const tsEnd = sourceFile.getLineAndCharacterOfPosition(
