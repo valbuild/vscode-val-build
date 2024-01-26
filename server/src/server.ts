@@ -1,7 +1,3 @@
-/* --------------------------------------------------------------------------------------------
- * Copyright (c) Microsoft Corporation. All rights reserved.
- * Licensed under the MIT License. See License.txt in the project root for license information.
- * ------------------------------------------------------------------------------------------ */
 import {
   createConnection,
   TextDocuments,
@@ -17,14 +13,10 @@ import {
   InitializeResult,
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
-import { Service, ValModuleLoader, createService } from "@valbuild/server";
+import { Service, createService } from "@valbuild/server";
 import { Internal, ModuleId, ModulePath, SourcePath } from "@valbuild/core";
 import ts from "typescript";
-import {
-  ModulePathMap,
-  createModulePathMap as createModulePathMap,
-  getModulePathRange,
-} from "./modulePathMap";
+import { createModulePathMap, getModulePathRange } from "./modulePathMap";
 import { glob } from "glob";
 import path from "path";
 import fs from "fs";
@@ -80,7 +72,7 @@ connection.onInitialize(async (params: InitializeParams) => {
   servicesByValRoot = Object.fromEntries(
     await Promise.all(
       valRoots.map(async (valRoot) => {
-        console.log("Create Val Service for root: " + valRoot);
+        console.log("Creating Val Service for root: " + valRoot + "...");
         const service = await createService(
           valRoot,
           {
@@ -281,6 +273,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
           true
         )
       );
+      console.log(modulePathMap, uriToFsPath(textDocument.uri));
 
       for (const [sourcePath, value] of Object.entries(errors.validation)) {
         if (value) {

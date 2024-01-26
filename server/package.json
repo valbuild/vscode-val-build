@@ -12,8 +12,8 @@
     "url": "https://github.com/valbuild/vscode-val-build"
   },
   "dependencies": {
-    "@valbuild/core": "^0.56.0",
-    "@valbuild/server": "^0.56.0",
+    "@valbuild/core": "^0.58.0",
+    "@valbuild/server": "^0.58.0",
     "glob": "^10.3.10",
     "vscode-languageserver": "^8.1.0",
     "vscode-languageserver-textdocument": "^1.0.8"

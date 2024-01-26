@@ -1,10 +1,11 @@
 import ts from "typescript";
 import { createModulePathMap, getModulePathRange } from "./modulePathMap";
+import assert from "assert";
 
 describe("Should map source path to line / cols", () => {
   test("test 1", () => {
     const text = `import type { InferSchemaType } from '@valbuild/next';
-import { s, val } from '../val.config';
+import { s, c } from '../val.config';
 
 const commons = {
   keepAspectRatio: s.boolean().optional(),
@@ -46,11 +47,11 @@ export const schema = s.object({
 });
 export type TestContent = InferSchemaType<typeof schema>;
 
-export default val.content(
+export default c.define(
   '/oj/test', // <- NOTE: this must be the same path as the file
   schema,
   {
-  testText: val.richtext\`
+  testText: c.richtext\`
 Hei dere!
 Dette er gøy!
 \`,
@@ -62,7 +63,7 @@ Dette er gøy!
     type: 'singleImage',
     keepAspectRatio: true,
     size: 'xs',
-    image: val.file('/public/Screenshot 2023-11-30 at 20.20.11_dbcdb.png'),
+    image: c.file('/public/Screenshot 2023-11-30 at 20.20.11_dbcdb.png'),
   },
   }
 );
@@ -75,14 +76,22 @@ Dette er gøy!
 
     const modulePathMap = createModulePathMap(sourceFile);
 
-    if (modulePathMap) {
-      console.log(getModulePathRange('"text"', modulePathMap));
-      console.log(getModulePathRange('"nested"."text"', modulePathMap));
-    }
+    assert(!!modulePathMap, "modulePathMap is undefined");
+
+    console.log(getModulePathRange('"text"', modulePathMap));
+    assert.deepStrictEqual(getModulePathRange('"text"', modulePathMap), {
+      end: { character: 6, line: 51 },
+      start: { character: 2, line: 51 },
+    });
+    console.log(getModulePathRange('"nested"."text"', modulePathMap));
+    assert.deepStrictEqual(
+      getModulePathRange('"nested"."text"', modulePathMap),
+      { end: { character: 8, line: 53 }, start: { character: 4, line: 53 } }
+    );
   });
 
   test("test 2", () => {
-    const text = `import { s, val } from '../val.config';
+    const text = `import { s, c } from '../val.config';
 
 const commons = {
   keepAspectRatio: s.boolean().optional(),
@@ -96,11 +105,11 @@ export const schema = s.object({
   image: s.image(),
 });
 
-export default val.content('/content/aboutUs', schema, {
+export default c.define('/content/aboutUs', schema, {
   ingress:
     'Vi elsker å bytestgge digitale tjenester som betyr noe for folk, helt fra bunn av, og helt ferdig. Vi tror på iterative utviklingsprosesser, tverrfaglige team, designdrevet produktutvikling og brukersentrerte designmetoder.',
   header: 'SPESIALISTER PÅ DIGITAL PRODUKTUTVIKLING',
-  image: val.file(
+  image: c.file(
     '/public/368032148_1348297689148655_444423253678040057_n_64374.png',
     {
       sha256:
@@ -118,21 +127,24 @@ export default val.content('/content/aboutUs', schema, {
     );
 
     const modulePathMap = createModulePathMap(sourceFile);
+    assert(!!modulePathMap, "modulePathMap is undefined");
 
-    if (modulePathMap) {
-      console.log(modulePathMap);
-      console.log(getModulePathRange('"ingress"', modulePathMap));
-    }
+    console.log(modulePathMap);
+    console.log(getModulePathRange('"ingress"', modulePathMap));
+    assert.deepStrictEqual(getModulePathRange('"ingress"', modulePathMap), {
+      start: { line: 15, character: 2 },
+      end: { line: 15, character: 9 },
+    });
   });
 
   test("test 3", () => {
-    const text = `import { s, val } from '../val.config';
+    const text = `import { s, c } from '../val.config';
 
 export const schema = s.object({
   first: s.array(s.object({ second: s.record(s.array(s.string()))}))
 });
 
-export default val.content('/content', schema, {
+export default c.define('/content', schema, {
   first: [{ second: { a: ['a', 'b'] } }]
 });
 `;
@@ -143,11 +155,15 @@ export default val.content('/content', schema, {
     );
 
     const modulePathMap = createModulePathMap(sourceFile);
+    assert(!!modulePathMap, "modulePathMap is undefined");
 
-    if (modulePathMap) {
-      console.log(
-        getModulePathRange('"first".0."second"."a".1', modulePathMap)
-      );
-    }
+    console.log(getModulePathRange('"first".0."second"."a".1', modulePathMap));
+    assert.deepStrictEqual(
+      getModulePathRange('"first".0."second"."a".1', modulePathMap),
+      {
+        start: { line: 7, character: 31 },
+        end: { line: 7, character: 34 },
+      }
+    );
   });
 });
