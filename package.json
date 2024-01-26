@@ -3,7 +3,7 @@
   "description": "Val Build IntelliSense",
   "author": "Val Build",
   "license": "MIT",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "repository": {
     "type": "git",
     "url": "https://github.com/valbuild/vscode-val-build"
@@ -13,6 +13,7 @@
   "keywords": [
     "multi-root ready"
   ],
+  "displayName": "Val Build IntelliSense",
   "engines": {
     "vscode": "^1.85.0"
   },
