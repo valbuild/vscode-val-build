@@ -1,7 +1,6 @@
 {
   "name": "vscode-val-build-client",
   "description": "Val Build client",
-  "icon": "media/icon.png",
   "author": "Val Build",
   "license": "MIT",
   "version": "0.0.1",
