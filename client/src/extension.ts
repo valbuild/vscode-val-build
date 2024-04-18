@@ -198,15 +198,14 @@ function getImageMetadata(imageFilename: string, document: vscode.Uri) {
       if (fileBuffer) {
         const res = sizeOf(fileBuffer);
         if (res.type) {
+          const mimeType = `image/${res.type}`;
           return {
             width: res.width,
             height: res.height,
             mimeType: `image/${res.type}`,
             sha256: getSHA256Hash(
               textEncoder.encode(
-                `data:${mimeTypeToFileExt(
-                  res.type
-                )};base64,${fileBuffer.toString("base64")}`
+                `data:${mimeType};base64,${fileBuffer.toString("base64")}`
               )
             ),
           };
@@ -233,9 +232,7 @@ function getFileMetadata(filename: string, document: vscode.Uri) {
           mimeType,
           sha256: getSHA256Hash(
             textEncoder.encode(
-              `data:${mimeTypeToFileExt(mimeType)};base64,${fileBuffer.toString(
-                "base64"
-              )}`
+              `data:${mimeType};base64,${fileBuffer.toString("base64")}`
             )
           ),
         };
