@@ -14,7 +14,12 @@ import {
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import { Service, createService } from "@valbuild/server";
-import { Internal, ModuleId, ModulePath, SourcePath } from "@valbuild/core";
+import {
+  Internal,
+  ModuleFilePath,
+  ModulePath,
+  SourcePath,
+} from "@valbuild/core";
 import ts from "typescript";
 import { createModulePathMap, getModulePathRange } from "./modulePathMap";
 import { glob } from "glob";
@@ -80,6 +85,7 @@ connection.onInitialize(async (params: InitializeParams) => {
           },
           {
             ...ts.sys,
+            rmFile: fs.unlinkSync,
             readFile(path) {
               if (cache.has(path)) {
                 return cache.get(path);
@@ -232,10 +238,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   }
   if (valRoot && service && isValModule) {
     const { source, schema, errors } = await service.get(
-      fsPath
-        .replace(valRoot, "")
-        .replace(".val.ts", "")
-        .replace(".val.js", "") as ModuleId,
+      fsPath.replace(valRoot, "") as ModuleFilePath,
       "" as ModulePath
     );
     if (errors && errors.fatal) {
@@ -277,7 +280,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
       for (const [sourcePath, value] of Object.entries(errors.validation)) {
         if (value) {
           value.forEach((error) => {
-            const [_, modulePath] = Internal.splitModuleIdAndModulePath(
+            const [_, modulePath] = Internal.splitModuleFilePathAndModulePath(
               sourcePath as SourcePath
             );
             let range =
