@@ -13,14 +13,44 @@ import sizeOf from "image-size";
 import { getSHA256Hash } from "./getSha256";
 import { TextEncoder } from "util";
 import * as ts from "typescript";
-import {
-  filenameToMimeType,
-  mimeTypeToFileExt,
-} from "./mimeType/convertMimeType";
+import { filenameToMimeType } from "./mimeType/convertMimeType";
+import fetch from "node-fetch-cjs";
 
 let client: LanguageClient;
 
 export function activate(context: ExtensionContext) {
+  // test login
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "vscode-val-build.loginWithGitHub",
+      async () => {
+        const session = await vscode.authentication.getSession(
+          "github",
+          ["read:user"],
+          { createIfNone: true }
+        );
+        if (session) {
+          fetch(
+            "http://localhost:4000/v1/freekh/val-examples-next13/remote/source/1231412",
+            {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Token ${session.accessToken}`,
+              },
+            }
+          ).then(async (res) => {
+            vscode.window.showInformationMessage(
+              `Logged in as ${session.account.label}: ${JSON.stringify(
+                await res.json()
+              )}. Token: ${session.accessToken}`
+            );
+          });
+        }
+      }
+    )
+  );
+
   context.subscriptions.push(
     vscode.languages.registerCodeActionsProvider(
       [

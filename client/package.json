@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "image-size": "^1.0.2",
+    "node-fetch-cjs": "^3.3.2",
     "vscode-languageclient": "^8.1.0"
   },
   "devDependencies": {
