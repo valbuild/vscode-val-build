@@ -10,13 +10,9 @@ import {
 import * as vscode from "vscode";
 import { readFileSync } from "fs";
 import sizeOf from "image-size";
-import { getSHA256Hash } from "./getSha256";
 import { TextEncoder } from "util";
 import * as ts from "typescript";
-import {
-  filenameToMimeType,
-  mimeTypeToFileExt,
-} from "./mimeType/convertMimeType";
+import { filenameToMimeType } from "./mimeType/convertMimeType";
 
 let client: LanguageClient;
 
@@ -203,11 +199,6 @@ function getImageMetadata(imageFilename: string, document: vscode.Uri) {
             width: res.width,
             height: res.height,
             mimeType: `image/${res.type}`,
-            sha256: getSHA256Hash(
-              textEncoder.encode(
-                `data:${mimeType};base64,${fileBuffer.toString("base64")}`
-              )
-            ),
           };
         }
       }
@@ -230,11 +221,6 @@ function getFileMetadata(filename: string, document: vscode.Uri) {
       if (fileBuffer) {
         return {
           mimeType,
-          sha256: getSHA256Hash(
-            textEncoder.encode(
-              `data:${mimeType};base64,${fileBuffer.toString("base64")}`
-            )
-          ),
         };
       }
     } catch (e) {}

@@ -12,7 +12,7 @@ describe.skip("transformer", () => {
           if (ts.isCallExpression(node)) {
             const firstArg = node.arguments[0];
             if (ts.isStringLiteral(firstArg) && !node.arguments[1]) {
-              const metadata = { width: 100, height: 100, sha256: "abc" };
+              const metadata = { width: 100, height: 100 };
 
               const newCallExpression = ts.factory.updateCallExpression(
                 node,
@@ -30,10 +30,6 @@ describe.skip("transformer", () => {
                       ts.factory.createNumericLiteral(
                         metadata.height.toString()
                       )
-                    ),
-                    ts.factory.createPropertyAssignment(
-                      ts.factory.createIdentifier("sha256"),
-                      ts.factory.createStringLiteral(metadata.sha256)
                     ),
                   ]),
                 ]

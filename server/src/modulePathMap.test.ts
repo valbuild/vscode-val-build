@@ -112,8 +112,6 @@ export default c.define('/content/aboutUs', schema, {
   image: c.file(
     '/public/368032148_1348297689148655_444423253678040057_n_64374.png',
     {
-      sha256:
-        '6437456f9b596355e54df8bbbe9bf32228a7b79ddbdd17cca5679931bd80ea84',
       width: 1283,
       height: 1121,
     }
