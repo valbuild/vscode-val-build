@@ -1,7 +1,7 @@
 import * as ts from "typescript";
 
 // TODO:
-describe.skip("transformer", () => {
+describe("transformer", () => {
   it("should transform a file", async () => {
     let n: ts.Identifier;
     const transformerFactory: ts.TransformerFactory<ts.SourceFile> = (
@@ -12,8 +12,12 @@ describe.skip("transformer", () => {
           if (ts.isCallExpression(node)) {
             const firstArg = node.arguments[0];
             if (ts.isStringLiteral(firstArg) && !node.arguments[1]) {
-              const metadata = { width: 100, height: 100 };
-
+              const metadata = {
+                width: 100,
+                height: 100,
+                mimeType: "image/jpeg",
+                alt: "Image alt text",
+              };
               const newCallExpression = ts.factory.updateCallExpression(
                 node,
                 node.expression,
@@ -31,6 +35,16 @@ describe.skip("transformer", () => {
                         metadata.height.toString()
                       )
                     ),
+                    ts.factory.createPropertyAssignment(
+                      ts.factory.createIdentifier("mimeType"),
+                      ts.factory.createNumericLiteral(
+                        metadata.mimeType.toString()
+                      )
+                    ),
+                    ts.factory.createPropertyAssignment(
+                      ts.factory.createIdentifier("alt"),
+                      ts.factory.createNumericLiteral(metadata.alt.toString())
+                    ),
                   ]),
                 ]
               );
@@ -45,7 +59,7 @@ describe.skip("transformer", () => {
     };
     const sourceFile = ts.createSourceFile(
       "test.val.ts",
-      `val.file('/public/image.png')`,
+      `c.image('/public/image.png')`,
       ts.ScriptTarget.ESNext
     );
     // add source file to program:

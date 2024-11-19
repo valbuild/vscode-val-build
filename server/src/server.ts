@@ -15,10 +15,14 @@ import {
 import { TextDocument } from "vscode-languageserver-textdocument";
 import { Service, createService } from "@valbuild/server";
 import {
+  FILE_REF_PROP,
+  FileSource,
   Internal,
   ModuleFilePath,
   ModulePath,
   SourcePath,
+  ValidationError,
+  ValidationErrors,
 } from "@valbuild/core";
 import ts from "typescript";
 import { createModulePathMap, getModulePathRange } from "./modulePathMap";
@@ -224,7 +228,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   const text = textDocument.getText();
   // vs code extension get path of uri:
 
-  const diagnostics: Diagnostic[] = [];
+  let diagnostics: Diagnostic[] = [];
   const fsPath = uriToFsPath(textDocument.uri);
   const valRoot = valRoots?.find((valRoot) => fsPath.startsWith(valRoot));
   const service = valRoot ? servicesByValRoot[valRoot] : undefined;
@@ -279,7 +283,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
 
       for (const [sourcePath, value] of Object.entries(errors.validation)) {
         if (value) {
-          value.forEach((error) => {
+          for (const error of value) {
             const [_, modulePath] = Internal.splitModuleFilePathAndModulePath(
               sourcePath as SourcePath
             );
@@ -293,10 +297,44 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
               if (valRange) {
                 range = valRange;
               }
-
+              if (
+                source &&
+                schema &&
+                // We are in the process of replacing image:replace-metadata with image:check-metadata, when we are done: remove image:replace-metadata and the type assertion
+                (error.fixes?.includes("image:replace-metadata") ||
+                  error.fixes?.includes("image:check-metadata" as any) ||
+                  error.fixes?.includes("file:check-metadata") ||
+                  error.fixes?.includes("image:add-metadata") ||
+                  error.fixes?.includes("image:add-metadata"))
+              ) {
+                const { source: sourceAtPath } = Internal.resolvePath(
+                  modulePath,
+                  source,
+                  schema
+                );
+                const ref = (sourceAtPath as FileSource)[FILE_REF_PROP];
+                const absFilePath = path.join(valRoot, ...ref.split("/"));
+                if (!fs.existsSync(absFilePath)) {
+                  const diagnostic: Diagnostic = {
+                    severity: DiagnosticSeverity.Error,
+                    range,
+                    code: "file-not-found",
+                    message: "File " + absFilePath + " does not exist",
+                    source: "val",
+                  };
+                  diagnostics = [diagnostic];
+                  connection.sendDiagnostics({
+                    uri: textDocument.uri,
+                    diagnostics,
+                  });
+                  return;
+                }
+              }
               // Skipping these for now, since we do not have hot fix yet
               if (
+                // We are in the process of replacing image:replace-metadata with image:check-metadata, when we are done: remove image:replace-metadata and the type assertion
                 !error.fixes?.includes("image:replace-metadata") &&
+                !error.fixes?.includes("image:check-metadata" as any) &&
                 !error.fixes?.includes("file:check-metadata")
               ) {
                 const addMetadataFix = error.fixes?.find(
@@ -321,7 +359,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                 diagnostics.push(diagnostic);
               }
             }
-          });
+          }
         }
       }
     }

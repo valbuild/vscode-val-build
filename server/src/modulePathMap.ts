@@ -94,7 +94,8 @@ function traverseCallExpression(
   if (ts.isPropertyAccessExpression(node.expression)) {
     if (
       node.expression.expression.getText(sourceFile) === "c" &&
-      node.expression.name.getText(sourceFile) === "file"
+      (node.expression.name.getText(sourceFile) === "file" ||
+        node.expression.name.getText(sourceFile) === "image")
     ) {
       const val = {
         children: {},

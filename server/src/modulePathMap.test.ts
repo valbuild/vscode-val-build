@@ -48,13 +48,10 @@ export const schema = s.object({
 export type TestContent = InferSchemaType<typeof schema>;
 
 export default c.define(
-  '/oj/test', // <- NOTE: this must be the same path as the file
+  '/oj/test.val.ts', // <- NOTE: this must be the same path as the file
   schema,
   {
-  testText: c.richtext\`
-Hei dere!
-Dette er gøy!
-\`,
+  testText: [],
   text: 'hei',
   nested: {
     text: 'hei',
@@ -63,7 +60,7 @@ Dette er gøy!
     type: 'singleImage',
     keepAspectRatio: true,
     size: 'xs',
-    image: c.file('/public/Screenshot 2023-11-30 at 20.20.11_dbcdb.png'),
+    image: c.image('/public/Screenshot 2023-11-30 at 20.20.11_dbcdb.png'),
   },
   }
 );
@@ -105,11 +102,11 @@ export const schema = s.object({
   image: s.image(),
 });
 
-export default c.define('/content/aboutUs', schema, {
+export default c.define('/content/aboutUs.val.ts', schema, {
   ingress:
     'Vi elsker å bytestgge digitale tjenester som betyr noe for folk, helt fra bunn av, og helt ferdig. Vi tror på iterative utviklingsprosesser, tverrfaglige team, designdrevet produktutvikling og brukersentrerte designmetoder.',
   header: 'SPESIALISTER PÅ DIGITAL PRODUKTUTVIKLING',
-  image: c.file(
+  image: c.image(
     '/public/368032148_1348297689148655_444423253678040057_n_64374.png',
     {
       width: 1283,
@@ -172,17 +169,7 @@ import { docsSchema } from "./docsSchema.val";
 export default c.define("/app/docs/docs", docsSchema, {
   "getting-started": {
     title: "Getting started",
-    content: c.richtext\`
-Text
-\`,
-    subPages: {
-      installation: {
-        title: "Installation",
-        subPagesL2: null,
-        content: null,
-      },
-    },
-  },
+    content: [],
 });    
 `;
 
