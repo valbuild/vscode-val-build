@@ -300,9 +300,9 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
               if (
                 source &&
                 schema &&
-                // We are in the process of replacing image:replace-metadata with image:check-metadata, when we are done: remove image:replace-metadata and the type assertion
-                (error.fixes?.includes("image:replace-metadata") ||
-                  error.fixes?.includes("image:check-metadata" as any) ||
+                // We have replaced image:replace-metadata with image:check-metadata, leaving this here for now, but this can be removed
+                (error.fixes?.includes("image:replace-metadata" as any) ||
+                  error.fixes?.includes("image:check-metadata" ) ||
                   error.fixes?.includes("file:check-metadata") ||
                   error.fixes?.includes("image:add-metadata") ||
                   error.fixes?.includes("image:add-metadata"))
@@ -332,9 +332,9 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
               }
               // Skipping these for now, since we do not have hot fix yet
               if (
-                // We are in the process of replacing image:replace-metadata with image:check-metadata, when we are done: remove image:replace-metadata and the type assertion
-                !error.fixes?.includes("image:replace-metadata") &&
-                !error.fixes?.includes("image:check-metadata" as any) &&
+                // We have replaced image:replace-metadata with image:check-metadata, leaving this here for now, but this can be removed
+                !error.fixes?.includes("image:replace-metadata" as any) &&
+                !error.fixes?.includes("image:check-metadata") &&
                 !error.fixes?.includes("file:check-metadata")
               ) {
                 const addMetadataFix = error.fixes?.find(
