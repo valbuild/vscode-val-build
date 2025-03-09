@@ -379,7 +379,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                     console.error(
                       "Expected error.value to be an object with key property and sourcePath property"
                     );
-                    // Ignores error
+                    // NOTE: this ignores error
                   }
                 } else if (source && schema && addMetadataFix) {
                   diagnostic.code = addMetadataFix;
