@@ -81,30 +81,32 @@ connection.onInitialize(async (params: InitializeParams) => {
   valRoots = getValRoots(valConfigFiles, packageJsonFiles);
   servicesByValRoot = Object.fromEntries(
     await Promise.all(
-      valRoots.map(async (valRoot) => {
-        console.log("Initializing Val Service for: '" + valRoot + "'...");
-        const service = await createService(
-          valRoot,
-          {
-            disableCache: true,
-          },
-          {
-            ...ts.sys,
-            rmFile: fs.unlinkSync,
-            readFile(path) {
-              if (cache.has(path)) {
-                return cache.get(path);
-              }
-              const content = fs.readFileSync(path, "utf8");
-              cache.set(path, content);
-              return content;
+      valRoots
+        .filter((valRoot) => !valRoot.includes("node_modules"))
+        .map(async (valRoot) => {
+          console.log("Initializing Val Service for: '" + valRoot + "'...");
+          const service = await createService(
+            valRoot,
+            {
+              disableCache: true,
             },
-            writeFile: fs.writeFileSync,
-          }
-        );
-        console.log("Created Val Service! Root: '" + valRoot + "'");
-        return [valRoot, service];
-      })
+            {
+              ...ts.sys,
+              rmFile: fs.unlinkSync,
+              readFile(path) {
+                if (cache.has(path)) {
+                  return cache.get(path);
+                }
+                const content = fs.readFileSync(path, "utf8");
+                cache.set(path, content);
+                return content;
+              },
+              writeFile: fs.writeFileSync,
+            }
+          );
+          console.log("Created Val Service! Root: '" + valRoot + "'");
+          return [valRoot, service];
+        })
     )
   );
 
