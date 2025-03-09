@@ -20,9 +20,9 @@ import {
   Internal,
   ModuleFilePath,
   ModulePath,
+  SerializedSchema,
+  Source,
   SourcePath,
-  ValidationError,
-  ValidationErrors,
 } from "@valbuild/core";
 import ts from "typescript";
 import { createModulePathMap, getModulePathRange } from "./modulePathMap";
@@ -30,6 +30,7 @@ import { glob } from "glob";
 import path from "path";
 import fs from "fs";
 import { stackToLine } from "./stackToLine";
+import { error } from "console";
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -302,7 +303,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                 schema &&
                 // We have replaced image:replace-metadata with image:check-metadata, leaving this here for now, but this can be removed
                 (error.fixes?.includes("image:replace-metadata" as any) ||
-                  error.fixes?.includes("image:check-metadata" ) ||
+                  error.fixes?.includes("image:check-metadata") ||
                   error.fixes?.includes("file:check-metadata") ||
                   error.fixes?.includes("image:add-metadata") ||
                   error.fixes?.includes("image:add-metadata"))
@@ -341,13 +342,46 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                   (fix) =>
                     fix === "image:add-metadata" || fix === "file:add-metadata"
                 );
+                const keyOfFix = error.fixes?.find(
+                  (fix) => fix === "keyof:check-keys"
+                );
                 const diagnostic: Diagnostic = {
                   severity: DiagnosticSeverity.Warning,
                   range,
                   message: error.message,
                   source: "val",
                 };
-                if (source && schema && addMetadataFix) {
+                if (source && schema && keyOfFix) {
+                  if (
+                    typeof error.value === "object" &&
+                    error.value &&
+                    "key" in error.value &&
+                    typeof error.value.key === "string" &&
+                    "sourcePath" in error.value &&
+                    typeof error.value.sourcePath === "string"
+                  ) {
+                    const key = error.value.key;
+                    const sourcePath = error.value.sourcePath;
+                    const [moduleFilePath, modulePath] =
+                      Internal.splitModuleFilePathAndModulePath(
+                        sourcePath as SourcePath
+                      );
+                    const refModule = await service.get(
+                      moduleFilePath,
+                      modulePath
+                    );
+                    const res = checkKeyOf(key, refModule);
+                    if (res.error) {
+                      diagnostic.message = res.message;
+                      diagnostics.push(diagnostic);
+                    }
+                  } else {
+                    console.error(
+                      "Expected error.value to be an object with key property and sourcePath property"
+                    );
+                    // Ignores error
+                  }
+                } else if (source && schema && addMetadataFix) {
                   diagnostic.code = addMetadataFix;
                   // Can't access
                   // diagnostic.data = Internal.resolvePath(
@@ -355,8 +389,10 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                   //   source,
                   //   schema
                   // );
+                  diagnostics.push(diagnostic);
+                } else {
+                  diagnostics.push(diagnostic);
                 }
-                diagnostics.push(diagnostic);
               }
             }
           }
@@ -367,6 +403,113 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
 
   // Send the computed diagnostics to VSCode.
   connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
+}
+
+// GPT generated levenshtein distance algorithm:
+const levenshtein = (a: string, b: string): number => {
+  const [m, n] = [a.length, b.length];
+  if (!m || !n) return Math.max(m, n);
+
+  const dp = Array.from({ length: m + 1 }, (_, i) => i);
+
+  for (let j = 1; j <= n; j++) {
+    let prev = dp[0];
+    dp[0] = j;
+
+    for (let i = 1; i <= m; i++) {
+      const temp = dp[i];
+      dp[i] =
+        a[i - 1] === b[j - 1]
+          ? prev
+          : Math.min(prev + 1, dp[i - 1] + 1, dp[i] + 1);
+      prev = temp;
+    }
+  }
+
+  return dp[m];
+};
+
+function findSimilar(key: string, targets: string[]) {
+  return targets
+    .map((target) => ({ target, distance: levenshtein(key, target) }))
+    .sort((a, b) => a.distance - b.distance);
+}
+
+function checkKeyOf(
+  key: string,
+  refModule: {
+    source?: Source;
+    schema?: SerializedSchema;
+    path: SourcePath;
+  }
+):
+  | {
+      error: true;
+      message: string;
+    }
+  | { error: false } {
+  const schema = refModule.schema;
+  const source = refModule.source;
+  const path = refModule.path;
+  if (schema) {
+    if (schema.type !== "record") {
+      return {
+        error: true,
+        message: "Expected schema to be a record",
+      };
+    } else {
+      if (schema.opt) {
+        return {
+          error: true,
+          message: "keyOf cannot be used on optional records",
+        };
+      }
+      if (typeof source !== "object") {
+        return {
+          error: true,
+          message: "keyOf must be used on records, found " + typeof source,
+        };
+      }
+      if (Array.isArray(source)) {
+        return {
+          error: true,
+          message: "keyOf must be used on records, found array",
+        };
+      }
+      if (source === null) {
+        return {
+          error: true,
+          message: "keyOf cannot be used on null",
+        };
+      }
+      if (!source) {
+        return {
+          error: true,
+          message: "Could not find source content",
+        };
+      }
+      if (key in source) {
+        return {
+          error: false,
+        };
+      }
+      const alternatives = findSimilar(key, Object.keys(source));
+      return {
+        error: true,
+        message: `Key '${key}' does not exist in ${path}. Closest match: '${
+          alternatives[0].target
+        }'. Other similar: ${alternatives
+          .slice(1, 4)
+          .map((a) => `'${a.target}'`)
+          .join(", ")}${alternatives.length > 4 ? ", ..." : ""}`,
+      };
+    }
+  } else {
+    return {
+      error: true,
+      message: "Could not find schema. Check that this Val module exists",
+    };
+  }
 }
 
 connection.onDidChangeWatchedFiles((_change) => {
