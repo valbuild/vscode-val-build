@@ -360,6 +360,11 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                     fix === "file:upload-remote" ||
                     fix === "image:upload-remote"
                 );
+                const downloadRemoteFileFix = error.fixes?.find(
+                  (fix) =>
+                    fix === "file:download-remote" ||
+                    fix === "image:download-remote"
+                );
                 const diagnostic: Diagnostic = {
                   severity: DiagnosticSeverity.Warning,
                   range,
@@ -456,6 +461,10 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                       textEncoder
                     );
                   diagnostic.message = "Expected remote file, but found local";
+                  diagnostics.push(diagnostic);
+                } else if (source && schema && downloadRemoteFileFix) {
+                  diagnostic.message = "Expected locale file, but found remote";
+                  diagnostic.code = downloadRemoteFileFix;
                   diagnostics.push(diagnostic);
                 } else {
                   diagnostics.push(diagnostic);

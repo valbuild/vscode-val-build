@@ -15,6 +15,7 @@ import { updateValConfig } from "./getValConfig";
 import { uploadRemoteFileCommand } from "./commands/uploadRemoteFile";
 import { loginCommand } from "./commands/loginCommand";
 import { getAddMetadataFix } from "./getAddMetadataFix";
+import { downloadRemoteFileCommand } from "./commands/downloadRemoteFile";
 
 let client: LanguageClient;
 let statusBarItem: vscode.StatusBarItem;
@@ -46,6 +47,10 @@ export function activate(context: ExtensionContext) {
     vscode.commands.registerCommand(
       "val.uploadRemoteFile",
       uploadRemoteFileCommand(statusBarItem)
+    ),
+    vscode.commands.registerCommand(
+      "val.downloadRemoteFile",
+      downloadRemoteFileCommand
     ),
     vscode.commands.registerCommand("val.login", loginCommand(statusBarItem))
   );
@@ -125,7 +130,6 @@ export class ValActionProvider implements vscode.CodeActionProvider {
   ): Promise<(vscode.CodeAction | vscode.Command)[]> {
     const actions: vscode.CodeAction[] = [];
     for (const diag of context.diagnostics) {
-      console.log("diag", diag);
       if (
         diag.code === "image:add-metadata" ||
         diag.code === "file:add-metadata"
@@ -183,6 +187,29 @@ export class ValActionProvider implements vscode.CodeActionProvider {
               text: document.getText(diag.range),
               code: diag.code,
               validationBasisHash,
+            },
+          ],
+        };
+        actions.push(fix);
+      } else if (
+        typeof diag.code === "string" &&
+        (diag.code.startsWith("image:download-remote") ||
+          diag.code.startsWith("file:download-remote"))
+      ) {
+        const fix = new vscode.CodeAction(
+          "Download and create local file",
+          vscode.CodeActionKind.QuickFix
+        );
+        fix.edit = new vscode.WorkspaceEdit();
+        fix.command = {
+          title: "Download and create local file",
+          command: "val.downloadRemoteFile",
+          arguments: [
+            {
+              uri: document.uri,
+              range: diag.range,
+              text: document.getText(diag.range),
+              code: diag.code,
             },
           ],
         };
