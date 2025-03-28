@@ -444,7 +444,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                   diagnostic.code =
                     uploadRemoteFileFix +
                     ":" +
-                    // TODO: find a different way to send the ValidationHash - we need it later when creating refs
+                    // TODO: figure out a different way to send the ValidationHash - we need it when creating refs in the client extension which is why we do it like this now...
                     Internal.remote.getValidationHash(
                       Internal.VERSION.core || "unknown",
                       resolvedSchemaAtPath as
