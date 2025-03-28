@@ -6,6 +6,9 @@
   "version": "0.0.1",
   "publisher": "valbuild",
   "homepage": "https://github.com/valbuild/vscode-val-build",
+  "scripts": {
+    "test": "jest src"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/valbuild/vscode-val-build"

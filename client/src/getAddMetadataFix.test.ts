@@ -1,10 +1,9 @@
 import * as ts from "typescript";
-import { getRemoteFileFix } from "./getRemoteFileFix";
-import { Internal } from "@valbuild/core";
 import * as assert from "assert";
+import { getAddMetadataFix } from "./getAddMetadataFix";
 
-describe("getRemoteFileFix", () => {
-  it("basics with hotspot", async () => {
+describe("getAddMetadataFix", () => {
+  it("basics", async () => {
     const input = `import { s, c, t } from '../../val.config';
 
 export const employeeSchema = s.object({
@@ -27,16 +26,7 @@ export default c.define('/content/company/allEmployees.val.ts', schema, {
     email: 'fake@mail.com',
     hide: false,
     image: c.image(
-      '/public/val/fakeImage.webp',
-      {
-        width: 2048,
-        height: 1365,
-        mimeType: 'image/webp',
-        hotspot: {
-          x: 0.5062893081761006,
-          y: 0.4293465501781632,
-        },
-      }
+      '/public/val/fakeImage.webp'
     ),
     name: 'Fake Image',
     phoneNumber: '12345678',
@@ -52,7 +42,7 @@ export default c.define('/content/company/allEmployees.val.ts', schema, {
         character: 11,
       },
       {
-        line: 33,
+        line: 24,
         character: 0,
       },
     ] as const;
@@ -63,38 +53,20 @@ export default c.define('/content/company/allEmployees.val.ts', schema, {
       true,
       ts.ScriptKind.TSX
     );
-    const bucket = "v01";
-    const publicProjectId = "12345";
-    const coreVersion = "0.0.1";
-    const validationHash = "abc123";
-    const res = getRemoteFileFix(
-      Internal,
-      bucket,
-      coreVersion,
-      validationHash,
-      publicProjectId,
-      sourceFile,
-      () => {
-        return {
-          mimeType: "image/png",
-          width: 42,
-          height: 42,
-        };
-      },
-      () => {
-        return Buffer.from("fakeBuffer");
-      }
-    );
+    console.log(getText(input, range));
+    const res = getAddMetadataFix(sourceFile, () => {
+      return {
+        mimeType: "image/png",
+        width: 42,
+        height: 42,
+      };
+    });
     assert.deepStrictEqual(
       res.newNodeText,
-      `c.remote("https://remote.val.build/file/p/12345/b/v01/v/0.0.1/h/abc123/f/1f072448a8aa/p/public/val/fakeImage.webp", {
-    width: 42,
-    height: 42,
+      `c.image('/public/val/fakeImage.webp', {
     mimeType: "image/png",
-    hotspot: {
-        x: 0.5062893081761006,
-        y: 0.4293465501781632,
-    }
+    width: 42,
+    height: 42
 }), `
     );
   });

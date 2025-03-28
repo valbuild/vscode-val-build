@@ -1,0 +1,55 @@
+name: Publish VS Code Extension
+
+on:
+  push:
+    tags:
+      - "v*" # Only run when pushing a version tag like v1.0.0
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: "16"
+
+      - name: Install dependencies
+        run: |
+          npm install
+
+      - name: Check that tag matches version
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          PACKAGE_VERSION=$(jq -r .version package.json)
+          LOCK_VERSION=$(jq -r .version package-lock.json)
+
+          echo "Tag version: $TAG_VERSION"
+          echo "package.json version: $PACKAGE_VERSION"
+          echo "package-lock.json version: $LOCK_VERSION"
+
+          if [ "$TAG_VERSION" != "$PACKAGE_VERSION" ]; then
+            echo "❌ Version mismatch: tag is $TAG_VERSION but package.json is $PACKAGE_VERSION"
+            exit 1
+          fi
+
+          if [ "$TAG_VERSION" != "$LOCK_VERSION" ]; then
+            echo "❌ Version mismatch: tag is $TAG_VERSION but package-lock.json is $LOCK_VERSION"
+            exit 1
+          fi
+
+          echo "✅ Tag matches version in package.json and package-lock.json"
+
+      - name: Package VS Code Extension
+        run: |
+          npx vsce package
+
+      - name: Publish to Visual Studio Marketplace
+        run: |
+          npx vsce publish --pat ${{ secrets.VSCE_TOKEN }}
+        env:
+          VSCE_TOKEN: ${{ secrets.VSCE_TOKEN }}

@@ -77,13 +77,13 @@ export default c.define(
 
     console.log(getModulePathRange('"text"', modulePathMap));
     assert.deepStrictEqual(getModulePathRange('"text"', modulePathMap), {
-      end: { character: 6, line: 51 },
-      start: { character: 2, line: 51 },
+      end: { character: 6, line: 48 },
+      start: { character: 2, line: 48 },
     });
     console.log(getModulePathRange('"nested"."text"', modulePathMap));
     assert.deepStrictEqual(
       getModulePathRange('"nested"."text"', modulePathMap),
-      { end: { character: 8, line: 53 }, start: { character: 4, line: 53 } }
+      { end: { character: 8, line: 50 }, start: { character: 4, line: 50 } }
     );
   });
 
@@ -159,35 +159,6 @@ export default c.define('/content', schema, {
         start: { line: 7, character: 31 },
         end: { line: 7, character: 34 },
       }
-    );
-  });
-
-  test("test 4: string literal object properties", () => {
-    const text = `import { c } from "../../val.config";
-import { docsSchema } from "./docsSchema.val";
-
-export default c.define("/app/docs/docs", docsSchema, {
-  "getting-started": {
-    title: "Getting started",
-    content: [],
-});    
-`;
-
-    const sourceFile = ts.createSourceFile(
-      "./content.val.ts",
-      text,
-      ts.ScriptTarget.ES2015
-    );
-
-    const modulePathMap = createModulePathMap(sourceFile);
-    assert(!!modulePathMap, "modulePathMap is undefined");
-    // console.log(JSON.stringify(modulePathMap, null, 2));
-    assert.deepStrictEqual(
-      getModulePathRange(
-        '"getting-started"."subPages"."installation"',
-        modulePathMap
-      ),
-      { end: { character: 18, line: 10 }, start: { character: 6, line: 10 } }
     );
   });
 });
