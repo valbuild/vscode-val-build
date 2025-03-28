@@ -2,7 +2,7 @@ import * as ts from "typescript";
 import { type Internal as InternalCoreFn } from "@valbuild/core";
 import { VAL_REMOTE_HOST } from "./envConstants";
 
-export function getRemoteFileFix(
+export function getRemoteUploadFileFix(
   Internal: typeof InternalCoreFn,
   bucket: string,
   coreVersion: string,

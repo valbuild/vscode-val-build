@@ -1,7 +1,7 @@
 import * as path from "path";
 import * as vscode from "vscode";
 import * as ts from "typescript";
-import { getRemoteFileFix } from "../getRemoteFileFix";
+import { getRemoteUploadFileFix } from "../getRemoteUploadFileFix";
 import { getFileMetadata, getImageMetadata } from "../metadataUtils";
 import { uploadRemoteFile } from "../uploadRemoteFile";
 import { isLoggedIn, loginFromVSCode, updateStatusBar } from "../login";
@@ -101,7 +101,7 @@ export const uploadRemoteFileCommand =
         true,
         ts.ScriptKind.TSX
       );
-      const remoteFileFixRes = getRemoteFileFix(
+      const remoteFileFixRes = getRemoteUploadFileFix(
         Internal,
         bucket,
         coreVersion,

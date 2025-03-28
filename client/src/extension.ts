@@ -8,7 +8,7 @@ import {
 } from "vscode-languageclient/node";
 import * as vscode from "vscode";
 import * as ts from "typescript";
-import { getRemoteFileFix } from "./getRemoteFileFix";
+import { getRemoteUploadFileFix } from "./getRemoteUploadFileFix";
 import { getFileMetadata, getImageMetadata } from "./metadataUtils";
 import { uploadRemoteFile } from "./uploadRemoteFile";
 import { isLoggedIn, loginFromVSCode, updateStatusBar } from "./login";
@@ -131,6 +131,7 @@ export class ValActionProvider implements vscode.CodeActionProvider {
   ): Promise<(vscode.CodeAction | vscode.Command)[]> {
     const actions: vscode.CodeAction[] = [];
     for (const diag of context.diagnostics) {
+      console.log("diag", diag);
       if (
         diag.code === "image:add-metadata" ||
         diag.code === "file:add-metadata"

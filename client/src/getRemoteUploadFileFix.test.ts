@@ -1,9 +1,9 @@
 import * as ts from "typescript";
-import { getRemoteFileFix } from "./getRemoteFileFix";
+import { getRemoteUploadFileFix } from "./getRemoteUploadFileFix";
 import { Internal } from "@valbuild/core";
 import * as assert from "assert";
 
-describe("getRemoteFileFix", () => {
+describe("getRemoteUploadFileFix", () => {
   it("basics with hotspot", async () => {
     const input = `import { s, c, t } from '../../val.config';
 
@@ -67,7 +67,7 @@ export default c.define('/content/company/allEmployees.val.ts', schema, {
     const publicProjectId = "12345";
     const coreVersion = "0.0.1";
     const validationHash = "abc123";
-    const res = getRemoteFileFix(
+    const res = getRemoteUploadFileFix(
       Internal,
       bucket,
       coreVersion,
