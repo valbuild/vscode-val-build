@@ -1,4 +1,4 @@
-name: Run Tests
+name: Run Type-check & Tests
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
       - main
 
 jobs:
-  test:
+  typecheck-test:
     runs-on: ubuntu-latest
 
     steps:
@@ -25,12 +25,14 @@ jobs:
         run: |
           npm install
 
-      - name: Run client tests
+      - name: Run client tests & typecheck
         run: |
           cd client
           npm test
+          npm run typecheck
 
-      - name: Run server tests
+      - name: Run server tests & typecheck
         run: |
           cd server
           npm test
+          npm run typecheck

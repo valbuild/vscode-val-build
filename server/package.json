@@ -19,7 +19,8 @@
     "vscode-languageserver-textdocument": "^1.0.11"
   },
   "scripts": {
-    "test": "jest src"
+    "test": "jest src",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.23.5",

@@ -7,7 +7,8 @@
   "publisher": "valbuild",
   "homepage": "https://github.com/valbuild/vscode-val-build",
   "scripts": {
-    "test": "jest src"
+    "test": "jest src",
+    "typecheck": "tsc --noEmit"
   },
   "repository": {
     "type": "git",
