@@ -3,7 +3,6 @@ import { getValConfig } from "./getValConfig";
 import * as path from "path";
 import { getLoginData } from "./login";
 import { Readable } from "stream";
-import { PassThrough } from "stream";
 import * as https from "https";
 
 export async function uploadRemoteFile(
@@ -29,6 +28,12 @@ export async function uploadRemoteFile(
     }
 > {
   const valConfig = await getValConfig(projectRootDir);
+  if (!valConfig) {
+    return {
+      status: "error",
+      message: `Could not find the 'val.config.ts' or 'val.config.js' file in the project root directory. Please create one.`,
+    };
+  }
   const projectName = valConfig.project;
   if (projectName === undefined) {
     return {

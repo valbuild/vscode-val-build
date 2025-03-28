@@ -30,7 +30,19 @@ export const uploadRemoteFileCommand =
     const { uri, range, text, code, validationBasisHash } = args;
     try {
       const projectDirOfDocumentUri = getProjectRootDir(uri);
+      if (!projectDirOfDocumentUri) {
+        vscode.window.showErrorMessage(
+          "Could not find project root. This file does not seem to be in a Val project (no package.json file found in parent directories)."
+        );
+        return;
+      }
       const valConfig = await getValConfig(projectDirOfDocumentUri);
+      if (!valConfig) {
+        vscode.window.showErrorMessage(
+          `Could not find val.config.{ts,js} file in ${projectDirOfDocumentUri}.`
+        );
+        return;
+      }
       const projectName = valConfig.project;
       if (projectName === undefined) {
         return {
@@ -115,7 +127,7 @@ export const uploadRemoteFileCommand =
             return getFileMetadata(filename, uri);
           }
         },
-        (filename) => {
+        (filename: string) => {
           return fs.readFileSync(
             path.join(projectDir, ...filename.split("/"))
           ) as Buffer;
