@@ -8,16 +8,10 @@ import {
 } from "vscode-languageclient/node";
 import * as vscode from "vscode";
 import * as ts from "typescript";
-import { getRemoteUploadFileFix } from "./getRemoteUploadFileFix";
 import { getFileMetadata, getImageMetadata } from "./metadataUtils";
-import { uploadRemoteFile } from "./uploadRemoteFile";
-import { isLoggedIn, loginFromVSCode, updateStatusBar } from "./login";
+import { updateStatusBar } from "./login";
 import { getProjectRootDir } from "./getProjectRootDir";
-import { getValConfig, updateValConfig } from "./getValConfig";
-import { getRemoteFileBucket } from "./getRemoteFileBucket";
-import { getProjectSettings } from "./getProjectSettings";
-import { getFileExt } from "./getFileExt";
-import * as fs from "fs";
+import { updateValConfig } from "./getValConfig";
 import { uploadRemoteFileCommand } from "./commands/uploadRemoteFile";
 import { loginCommand } from "./commands/loginCommand";
 import { getAddMetadataFix } from "./getAddMetadataFix";
