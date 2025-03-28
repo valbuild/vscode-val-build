@@ -25,6 +25,12 @@
   "main": "./client/out/extension",
   "type": "module",
   "contributes": {
+    "commands": [
+      {
+        "command": "val.login",
+        "title": "Val: Log In"
+      }
+    ],
     "configuration": {
       "type": "object",
       "title": "Val Build IntelliSense",

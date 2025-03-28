@@ -20,6 +20,8 @@ import {
   Internal,
   ModuleFilePath,
   ModulePath,
+  SerializedFileSchema,
+  SerializedImageSchema,
   SerializedSchema,
   Source,
   SourcePath,
@@ -31,6 +33,7 @@ import path from "path";
 import fs from "fs";
 import { stackToLine } from "./stackToLine";
 import { error } from "console";
+import { getFileExt } from "./getFileExt";
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -224,6 +227,7 @@ function uriToFsPath(uri: string): string {
   return uri.replace("file://", "");
 }
 
+const textEncoder = new TextEncoder();
 async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   // const settings = await getDocumentSettings(textDocument.uri);
 
@@ -308,7 +312,9 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                   error.fixes?.includes("image:check-metadata") ||
                   error.fixes?.includes("file:check-metadata") ||
                   error.fixes?.includes("image:add-metadata") ||
-                  error.fixes?.includes("image:add-metadata"))
+                  error.fixes?.includes("image:add-metadata") ||
+                  error.fixes?.includes("image:upload-remote") ||
+                  error.fixes?.includes("file:upload-remote"))
               ) {
                 const { source: sourceAtPath } = Internal.resolvePath(
                   modulePath,
@@ -338,7 +344,9 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                 // We have replaced image:replace-metadata with image:check-metadata, leaving this here for now, but this can be removed
                 !error.fixes?.includes("image:replace-metadata" as any) &&
                 !error.fixes?.includes("image:check-metadata") &&
-                !error.fixes?.includes("file:check-metadata")
+                !error.fixes?.includes("file:check-metadata") &&
+                !error.fixes?.includes("image:check-remote") &&
+                !error.fixes?.includes("file:check-remote")
               ) {
                 const addMetadataFix = error.fixes?.find(
                   (fix) =>
@@ -346,6 +354,11 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                 );
                 const keyOfFix = error.fixes?.find(
                   (fix) => fix === "keyof:check-keys"
+                );
+                const uploadRemoteFileFix = error.fixes?.find(
+                  (fix) =>
+                    fix === "file:upload-remote" ||
+                    fix === "image:upload-remote"
                 );
                 const diagnostic: Diagnostic = {
                   severity: DiagnosticSeverity.Warning,
@@ -385,12 +398,64 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                   }
                 } else if (source && schema && addMetadataFix) {
                   diagnostic.code = addMetadataFix;
-                  // Can't access
+                  // TODO: this doesn't seem to work
                   // diagnostic.data = Internal.resolvePath(
                   //   modulePath,
                   //   source,
                   //   schema
                   // );
+                  diagnostics.push(diagnostic);
+                } else if (source && schema && uploadRemoteFileFix) {
+                  const {
+                    source: resolvedSourceAtPath,
+                    schema: resolvedSchemaAtPath,
+                  } = Internal.resolvePath(modulePath, source, schema);
+                  const filePath = (resolvedSourceAtPath as any)?.[
+                    FILE_REF_PROP
+                  ];
+                  if (typeof filePath !== "string") {
+                    console.error(
+                      "Expected filePath to be a string, but found " +
+                        typeof filePath,
+                      "in",
+                      JSON.stringify(source)
+                    );
+                    return;
+                  }
+                  if (
+                    resolvedSchemaAtPath.type !== "file" &&
+                    resolvedSchemaAtPath.type !== "image"
+                  ) {
+                    console.error(
+                      "Expected schema to be a file or image, but found " +
+                        resolvedSchemaAtPath.type,
+                      "in",
+                      JSON.stringify(source)
+                    );
+                    return;
+                  }
+                  const fileExt = getFileExt(filePath);
+                  const metadata = (resolvedSourceAtPath as any).metadata;
+                  const fileHash = Internal.remote.getFileHash(
+                    fs.readFileSync(
+                      path.join(valRoot, ...filePath.split("/"))
+                    ) as Buffer
+                  );
+                  diagnostic.code =
+                    uploadRemoteFileFix +
+                    ":" +
+                    // TODO: find a different way to send the ValidationHash - we need it later when creating refs
+                    Internal.remote.getValidationHash(
+                      Internal.VERSION.core || "unknown",
+                      resolvedSchemaAtPath as
+                        | SerializedFileSchema
+                        | SerializedImageSchema,
+                      fileExt,
+                      metadata,
+                      fileHash,
+                      textEncoder
+                    );
+                  diagnostic.message = "Expected remote file, but found local";
                   diagnostics.push(diagnostic);
                 } else {
                   diagnostics.push(diagnostic);

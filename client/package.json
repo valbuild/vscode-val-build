@@ -14,11 +14,15 @@
     "vscode": "^1.85.0"
   },
   "dependencies": {
+    "@valbuild/core": "^0.74.0",
     "image-size": "^1.0.2",
     "vscode-languageclient": "^8.1.0"
   },
   "devDependencies": {
+    "@babel/preset-env": "^7.23.5",
+    "@babel/preset-typescript": "^7.23.3",
     "@types/vscode": "^1.85.0",
-    "@vscode/test-electron": "^2.2.3"
+    "@vscode/test-electron": "^2.2.3",
+    "jest": "^29.7.0"
   }
 }

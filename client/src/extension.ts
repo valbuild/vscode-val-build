@@ -1,6 +1,5 @@
 import * as path from "path";
 import { workspace, ExtensionContext } from "vscode";
-
 import {
   LanguageClient,
   LanguageClientOptions,
@@ -8,15 +7,32 @@ import {
   TransportKind,
 } from "vscode-languageclient/node";
 import * as vscode from "vscode";
-import { fstatSync, readFileSync } from "fs";
-import sizeOf from "image-size";
 import * as ts from "typescript";
-import { filenameToMimeType } from "./mimeType/convertMimeType";
+import { getRemoteFileFix } from "./getRemoteFileFix";
+import { getFileMetadata, getImageMetadata } from "./metadataUtils";
+import { uploadRemoteFile } from "./uploadRemoteFile";
+import { isLoggedIn, loginFromVSCode, updateStatusBar } from "./login";
+import { getProjectRootDir } from "./getProjectRootDir";
+import { getValConfig, updateValConfig } from "./getValConfig";
+import { getRemoteFileBucket } from "./getRemoteFileBucket";
+import { getProjectSettings } from "./getProjectSettings";
+import { getFileExt } from "./getFileExt";
+import * as fs from "fs";
 
 let client: LanguageClient;
+let statusBarItem: vscode.StatusBarItem;
+let currentProjectDir: string;
 
 export function activate(context: ExtensionContext) {
+  const currentEditor = vscode.window.activeTextEditor;
+  currentProjectDir = getProjectRootDir(currentEditor.document.uri);
+  statusBarItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    100
+  );
+  statusBarItem.command = "val.login";
   context.subscriptions.push(
+    statusBarItem,
     vscode.languages.registerCodeActionsProvider(
       [
         { scheme: "file", language: "typescript" },
@@ -29,8 +45,231 @@ export function activate(context: ExtensionContext) {
       {
         providedCodeActionKinds: ValActionProvider.providedCodeActionKinds,
       }
-    )
+    ),
+    vscode.commands.registerCommand("val.uploadRemoteFile", async (args) => {
+      let coreVersion = "unknown";
+      let Internal: Awaited<typeof import("@valbuild/core")>["Internal"] =
+        undefined;
+      try {
+        const valbuildCore = await import("@valbuild/core");
+        coreVersion = valbuildCore.Internal.VERSION.core;
+        Internal = valbuildCore.Internal;
+      } catch (err) {
+        vscode.window.showErrorMessage(
+          "Val Build core not found. Please install the Val Build core package."
+        );
+        return;
+      }
+      const { uri, range, text, code, validationBasisHash } = args;
+      try {
+        const projectDirOfDocumentUri = getProjectRootDir(uri);
+        const valConfig = await getValConfig(projectDirOfDocumentUri);
+        const projectName = valConfig.project;
+        if (projectName === undefined) {
+          return {
+            status: "error",
+            message: `Could not find the 'project' field in the '${path.join(
+              projectDirOfDocumentUri,
+              "val.config.{ts,js}"
+            )}' file. Please specify the project name like this: { project: 'example-org/example-name' }`,
+          };
+        }
+        const bucketRes = await getRemoteFileBucket(
+          projectDirOfDocumentUri,
+          projectName
+        );
+        if (bucketRes.status !== "success") {
+          return bucketRes;
+        }
+        const bucket = bucketRes.data;
+        const projectDir = getProjectRootDir(uri);
+        const loggedIn = isLoggedIn(projectDir);
+        if (!loggedIn) {
+          const shouldLogin = await vscode.window.showInformationMessage(
+            `You're not logged in to Val for project "${path.basename(
+              projectDir
+            )}".`,
+            "Log in",
+            "Cancel"
+          );
+          if (shouldLogin === "Log in") {
+            try {
+              await loginFromVSCode(projectDir);
+              updateStatusBar(statusBarItem, projectDir);
+            } catch (err) {
+              vscode.window.showErrorMessage(
+                `Login failed: ${
+                  err instanceof Error ? err.message : String(err)
+                }`
+              );
+              return;
+            }
+          }
+        }
+        const finalLoggedInCheck = isLoggedIn(projectDir);
+        if (!finalLoggedInCheck) {
+          vscode.window.showErrorMessage(
+            `Login failed: ${projectDir} is not logged in.`
+          );
+          return;
+        }
+        const projectSettingsRes = await getProjectSettings(
+          projectDir,
+          projectName
+        );
+        if (projectSettingsRes.status !== "success") {
+          // We have already checked for login, so if there's a login error here, something else is wrong
+          vscode.window.showErrorMessage(
+            `Project settings not found for project "${projectName}". Error: ${projectSettingsRes.status}`
+          );
+          return;
+        }
+        const projectSettings = projectSettingsRes.data;
+        const publicProjectId = projectSettings.publicProjectId;
+
+        const sourceFile = ts.createSourceFile(
+          "<synthetic-source-file>",
+          text,
+          ts.ScriptTarget.ES2015,
+          true,
+          ts.ScriptKind.TSX
+        );
+        const remoteFileFixRes = getRemoteFileFix(
+          Internal,
+          bucket,
+          coreVersion,
+          validationBasisHash,
+          publicProjectId,
+          sourceFile,
+          (filename: string) => {
+            if (typeof code === "string" && code.startsWith("image")) {
+              return getImageMetadata(filename, uri);
+            } else {
+              return getFileMetadata(filename, uri);
+            }
+          },
+          (filename) => {
+            return fs.readFileSync(
+              path.join(projectDir, ...filename.split("/"))
+            ) as Buffer;
+          }
+        );
+        if (remoteFileFixRes === null) {
+          vscode.window.showErrorMessage(
+            "Unexpected error: could not create remote file fix"
+          );
+          return;
+        }
+        const newNodeText = remoteFileFixRes.newNodeText;
+        const filename = remoteFileFixRes.foundFilename;
+        const fileHash = remoteFileFixRes.fileHash;
+        const fileExt = getFileExt(filename);
+        const fileBuffer = remoteFileFixRes.fileBuffer;
+        if (!newNodeText) {
+          vscode.window.showErrorMessage(
+            `Could not create new node text for code snippet: '${text}'`
+          );
+          return;
+        }
+        await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: "Uploading file",
+            cancellable: false,
+          },
+          async (progress) => {
+            progress.report({ increment: 0, message: "Uploading..." });
+            const uploadRes = await uploadRemoteFile(
+              projectDir,
+              bucket,
+              fileExt,
+              fileHash,
+              fileBuffer,
+              (bytesSent, totalBytes) => {
+                progress.report({
+                  increment: Math.round((bytesSent / totalBytes) * 100),
+                  message: `Uploading ${filename} (${Math.round(
+                    (bytesSent / totalBytes) * 100
+                  )}%)`,
+                });
+              }
+            );
+            progress.report({
+              increment: 100,
+              message: `Upload complete`,
+            });
+            if (uploadRes.status === "login-required") {
+              return vscode.window.showErrorMessage(
+                `Login error: ${filename}.`
+              );
+            } else if (
+              uploadRes.status === "success" ||
+              uploadRes.status === "file-already-exists"
+            ) {
+              const edit = new vscode.WorkspaceEdit();
+              edit.replace(uri, range, newNodeText);
+              await vscode.workspace.applyEdit(edit);
+              if (uploadRes.status === "file-already-exists") {
+                vscode.window.showInformationMessage(
+                  `Code fix applied (file ${filename} already exists)`
+                );
+              } else {
+                vscode.window.showInformationMessage(
+                  `File uploaded ${filename} and code fix has been applied`
+                );
+              }
+            } else {
+              vscode.window.showErrorMessage(
+                `Upload failed for ${filename}. Error: ${uploadRes.message}`
+              );
+            }
+          }
+        );
+      } catch (err) {
+        vscode.window.showErrorMessage(`Upload failed: ${err}`);
+      }
+    }),
+    vscode.commands.registerCommand("val.login", async () => {
+      try {
+        const editor = vscode.window.activeTextEditor;
+        const docUri = editor.document.uri;
+        const projectDir = getProjectRootDir(docUri);
+        const loggedIn = isLoggedIn(projectDir);
+        if (!loggedIn) {
+          await loginFromVSCode(projectDir);
+          vscode.window.showInformationMessage(
+            `Logged in to Val for project at ${projectDir}`
+          );
+          updateStatusBar(statusBarItem, projectDir);
+          return;
+        }
+        vscode.window.showInformationMessage("You're already logged in.");
+      } catch (err) {
+        vscode.window.showErrorMessage(
+          `Val login failed: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        );
+      }
+    })
   );
+  updateStatusBar(statusBarItem, currentProjectDir);
+
+  vscode.window.onDidChangeActiveTextEditor(
+    () => {
+      const maybeNewProjectDir = getProjectRootDir(
+        vscode.window.activeTextEditor.document.uri
+      );
+      if (maybeNewProjectDir !== currentProjectDir) {
+        currentProjectDir = maybeNewProjectDir;
+        updateStatusBar(statusBarItem, currentProjectDir);
+        updateValConfig(currentProjectDir);
+      }
+    },
+    null,
+    context.subscriptions
+  );
+
   // The server is implemented in node
   const serverModule = context.asAbsolutePath(
     path.join("server", "out", "server.js")
@@ -83,11 +322,11 @@ export class ValActionProvider implements vscode.CodeActionProvider {
     vscode.CodeActionKind.QuickFix,
   ];
 
-  provideCodeActions(
+  async provideCodeActions(
     document: vscode.TextDocument,
     _range: vscode.Range | vscode.Selection,
     context: vscode.CodeActionContext
-  ): vscode.ProviderResult<(vscode.CodeAction | vscode.Command)[]> {
+  ): Promise<(vscode.CodeAction | vscode.Command)[]> {
     const actions: vscode.CodeAction[] = [];
     for (const diag of context.diagnostics) {
       if (
@@ -179,74 +418,42 @@ export class ValActionProvider implements vscode.CodeActionProvider {
             actions.push(fix);
           }
         }
+      } else if (
+        typeof diag.code === "string" &&
+        (diag.code.startsWith("image:upload-remote") ||
+          diag.code.startsWith("file:upload-remote"))
+      ) {
+        // extract validation hash from diag.code. Example: image:upload-remote:91c0
+        const validationBasisHash = diag.code.split(":")[2];
+        if (!validationBasisHash) {
+          console.error(
+            "No validation basis hash found in diag.code",
+            diag.code
+          );
+          return actions;
+        }
+        const fix = new vscode.CodeAction(
+          "Upload to Val",
+          vscode.CodeActionKind.QuickFix
+        );
+        fix.command = {
+          title: "Upload to Val",
+          command: "val.uploadRemoteFile",
+          arguments: [
+            {
+              uri: document.uri,
+              range: diag.range,
+              text: document.getText(diag.range),
+              code: diag.code,
+              validationBasisHash,
+            },
+          ],
+        };
+        actions.push(fix);
       }
     }
     return actions;
   }
-}
-
-function getAbsoluteFilePath(relativePath: string, document: vscode.Uri) {
-  let rootPath = document.fsPath;
-  const workspaceFolder =
-    vscode.workspace.getWorkspaceFolder(document).uri.fsPath;
-  let iterations = 0;
-  // TODO: this can't be the best way to find the root of the project we are in?
-  while (workspaceFolder !== rootPath && iterations < 100) {
-    rootPath = path.dirname(rootPath);
-    iterations++;
-    try {
-      // check if file exists
-
-      const absPath = path.join(rootPath, relativePath);
-      const fileBuffer = readFileSync(absPath);
-      if (fileBuffer) {
-        return {
-          status: "ok",
-          path: absPath,
-          buffer: fileBuffer,
-        };
-      }
-    } catch (e) {}
-  }
-  return {
-    status: "error",
-  };
-}
-
-function getImageMetadata(imageFilename: string, document: vscode.Uri) {
-  const resolvedFile = getAbsoluteFilePath(imageFilename, document);
-  if (resolvedFile.status === "ok") {
-    if (resolvedFile.buffer) {
-      const res = sizeOf(resolvedFile.buffer);
-      if (res.type) {
-        let mimeType = `image/${res.type}`;
-        if (res.type === "svg") {
-          mimeType = "image/svg+xml";
-        }
-        return {
-          width: res.width,
-          height: res.height,
-          mimeType,
-        };
-      }
-    }
-  }
-  console.warn("Could not find metadata for image:", imageFilename);
-  return {};
-}
-
-function getFileMetadata(filename: string, document: vscode.Uri) {
-  const resolvedFile = getAbsoluteFilePath(filename, document);
-  if (resolvedFile.status === "ok") {
-    const mimeType = filenameToMimeType(filename);
-    if (mimeType) {
-      return {
-        mimeType,
-      };
-    }
-  }
-  console.warn("Could not find metadata for image:", filename);
-  return {};
 }
 
 /**
