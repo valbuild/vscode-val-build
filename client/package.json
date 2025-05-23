@@ -18,7 +18,7 @@
     "vscode": "^1.85.0"
   },
   "dependencies": {
-    "@valbuild/core": "^0.74.0",
+    "@valbuild/core": "^0.79.0",
     "image-size": "^1.0.2",
     "vscode-languageclient": "^8.1.0"
   },
