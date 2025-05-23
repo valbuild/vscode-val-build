@@ -229,12 +229,7 @@ function uriToFsPath(uri: string): string {
 
 const textEncoder = new TextEncoder();
 async function validateTextDocument(textDocument: TextDocument): Promise<void> {
-  // const settings = await getDocumentSettings(textDocument.uri);
-
-  // The validator creates diagnostics for all uppercase words length 2 and more
   const text = textDocument.getText();
-  // vs code extension get path of uri:
-
   let diagnostics: Diagnostic[] = [];
   const fsPath = uriToFsPath(textDocument.uri);
   const valRoot = valRoots?.find((valRoot) => fsPath.startsWith(valRoot));
