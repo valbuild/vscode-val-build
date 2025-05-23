@@ -231,7 +231,7 @@ const textEncoder = new TextEncoder();
 async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   const text = textDocument.getText();
   let diagnostics: Diagnostic[] = [];
-  const fsPath = uriToFsPath(textDocument.uri);
+  const fsPath = decodeURIComponent(uriToFsPath(textDocument.uri));
   const valRoot = valRoots?.find((valRoot) => fsPath.startsWith(valRoot));
   const service = valRoot ? servicesByValRoot[valRoot] : undefined;
   const isValModule = fsPath.includes(".val.ts") || fsPath.includes(".val.js");
