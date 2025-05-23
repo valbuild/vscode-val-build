@@ -61,7 +61,7 @@ export function activate(context: ExtensionContext) {
       const maybeNewProjectDir = getProjectRootDir(
         vscode.window.activeTextEditor.document.uri
       );
-      if (maybeNewProjectDir !== currentProjectDir) {
+      if (maybeNewProjectDir && maybeNewProjectDir !== currentProjectDir) {
         currentProjectDir = maybeNewProjectDir;
         updateStatusBar(statusBarItem, currentProjectDir);
         updateValConfig(currentProjectDir);
