@@ -6,7 +6,7 @@ Val Build IntelliSense improves the Val development experience by providing Visu
 
 **[Install via the Visual Studio Code Marketplace →](https://marketplace.visualstudio.com/items?itemName=valbuild.vscode-val-build)**
 
-In order for the extension to activate you must have [`Val` installed](https://val.build/docs/getting-started/installation).
+In order for the extension to activate you must have [`Val` installed](https://val.build/docs).
 
 ## Features
 
