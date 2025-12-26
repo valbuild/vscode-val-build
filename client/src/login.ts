@@ -65,7 +65,10 @@ async function pollForConfirmation(
     await new Promise((r) => setTimeout(r, 1000));
 
     const res = await fetch(
-      `${VAL_BUILD_URL}/api/login?token=${token}&consume=true`
+      `${VAL_BUILD_URL}/api/login?token=${token}&consume=true`,
+      {
+        method: "POST",
+      }
     );
     if (res.status === 200) {
       const json = (await res.json()) as any;
