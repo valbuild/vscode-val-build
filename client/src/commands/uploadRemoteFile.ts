@@ -11,9 +11,11 @@ import { getRemoteFileBucket } from "../getRemoteFileBucket";
 import { getProjectSettings } from "../getProjectSettings";
 import { getFileExt } from "../getFileExt";
 import * as fs from "fs";
+import { VAL_BUILD_URL } from "../envConstants";
 
 export const uploadRemoteFileCommand =
   (statusBarItem: vscode.StatusBarItem) => async (args) => {
+    console.log("Upload remote file command called with arguments:", args);
     let coreVersion = "unknown";
     let Internal: Awaited<typeof import("@valbuild/core")>["Internal"] =
       undefined;
@@ -24,6 +26,12 @@ export const uploadRemoteFileCommand =
     } catch (err) {
       vscode.window.showErrorMessage(
         "Val Build core not found. Please install the Val Build core package."
+      );
+      return;
+    }
+    if (!args) {
+      vscode.window.showErrorMessage(
+        "No arguments provided to uploadRemoteFileCommand"
       );
       return;
     }
@@ -58,7 +66,16 @@ export const uploadRemoteFileCommand =
         projectName
       );
       if (bucketRes.status !== "success") {
-        return bucketRes;
+        if (bucketRes.status === "login-required") {
+          vscode.window.showErrorMessage(
+            `You're not logged in to Val for project "${projectName}". Please log in to Val.`
+          );
+          return;
+        }
+        vscode.window.showErrorMessage(
+          `Could not get remote file bucket for project "${projectName}". ${bucketRes.message}`
+        );
+        return;
       }
       const bucket = bucketRes.data;
       const projectDir = getProjectRootDir(uri);

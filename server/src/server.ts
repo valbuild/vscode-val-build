@@ -104,7 +104,13 @@ connection.onInitialize(async (params: InitializeParams) => {
                 cache.set(path, content);
                 return content;
               },
-              writeFile: fs.writeFileSync,
+              writeFile(fileName, data, encoding) {
+                if (typeof data !== "string") {
+                  fs.writeFileSync(fileName, data.toString("utf-8"), encoding);
+                } else {
+                  fs.writeFileSync(fileName, data, encoding);
+                }
+              },
             }
           );
           console.log("Created Val Service! Root: '" + valRoot + "'");
