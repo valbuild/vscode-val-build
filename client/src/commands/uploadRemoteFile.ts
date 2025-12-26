@@ -45,13 +45,13 @@ export const uploadRemoteFileCommand =
       }
       const projectName = valConfig.project;
       if (projectName === undefined) {
-        return {
-          status: "error",
-          message: `Could not find the 'project' field in the '${path.join(
+        vscode.window.showErrorMessage(
+          `Could not find the 'project' field in the '${path.join(
             projectDirOfDocumentUri,
             "val.config.{ts,js}"
-          )}' file. Please specify the project name like this: { project: 'example-org/example-name' }`,
-        };
+          )}' file. Please specify the project name like this: { project: 'example-org/example-name' }`
+        );
+        return;
       }
       const bucketRes = await getRemoteFileBucket(
         projectDirOfDocumentUri,
