@@ -3,4 +3,4 @@ export const VAL_CONTENT_URL =
 export const VAL_REMOTE_HOST =
   process.env.VAL_REMOTE_HOST || "https://remote.val.build";
 export const VAL_BUILD_URL =
-  process.env.VAL_BUILD_URL || "https://app.val.build";
+  process.env.VAL_BUILD_URL || "https://admin.val.build";
