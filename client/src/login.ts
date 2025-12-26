@@ -4,7 +4,7 @@ import * as path from "path";
 import { VAL_BUILD_URL } from "./envConstants";
 
 export type PatData = {
-  profile: { username: string };
+  profile: { email: string };
   pat: string;
 };
 let pats: Record<string, PatData> = {};
@@ -20,7 +20,7 @@ export function getLoginData(rootDir: string) {
     const contents = fs.readFileSync(tokenPath, "utf8");
     const parsed = JSON.parse(contents);
     if (
-      typeof parsed?.profile?.username !== "string" ||
+      typeof parsed?.profile?.email !== "string" ||
       typeof parsed?.pat !== "string"
     ) {
       return false;
@@ -57,7 +57,7 @@ export async function loginFromVSCode(projectRootDir: string): Promise<void> {
 
 async function pollForConfirmation(
   token: string
-): Promise<{ profile: { username: string }; pat: string }> {
+): Promise<{ profile: { email: string }; pat: string }> {
   const start = Date.now();
   const timeout = 5 * 60 * 1000; // 5 minutes
 
@@ -69,7 +69,7 @@ async function pollForConfirmation(
     );
     if (res.status === 200) {
       const json = (await res.json()) as any;
-      if (json?.profile?.username && json?.pat) {
+      if (json?.profile?.email && json?.pat) {
         return json;
       }
     }
@@ -79,7 +79,7 @@ async function pollForConfirmation(
 }
 
 function saveToken(
-  result: { profile: { username: string }; pat: string },
+  result: { profile: { email: string }; pat: string },
   filePath: string
 ) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
