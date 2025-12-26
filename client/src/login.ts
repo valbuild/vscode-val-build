@@ -108,11 +108,11 @@ export async function updateStatusBar(
 
   try {
     const json = JSON.parse(fs.readFileSync(tokenPath, "utf8"));
-    if (json?.profile?.username) {
-      statusBarItem.text = `$(account) (Val) ${json.profile.username}`;
+    if (json?.profile?.email) {
+      statusBarItem.text = `$(account) (Val) ${json.profile.email}`;
       statusBarItem.show();
     } else {
-      statusBarItem.text = `$(account) Unknown user`;
+      statusBarItem.text = `$(account) (Val) Unknown user`;
       statusBarItem.show();
     }
   } catch {
