@@ -39,8 +39,10 @@ export async function getProjectSettings(
       status: "login-required",
     };
   }
+  console.log("Fetching project settings for project:", projectName, loginData);
   const auth = { pat: loginData.pat };
   const result = await fetchProjectSettings(projectName, auth);
+  console.log("Fetch project settings result:", result);
   if (result.success === false) {
     return {
       status: "error",
@@ -86,17 +88,18 @@ async function fetchProjectSettings(
     if (response.status === 404) {
       return {
         success: false,
-        message: `Project '${projectName}' not found: that the name of the project is correct and that you have access to it.`,
+        message: `Project '${projectName}' not found: check that the name of the project is correct and that you have access to it.`,
       };
     }
     if (response.status !== 200) {
+      const body = await response.text();
+      console.log("Failed to get project id:", response.statusText, body);
       return {
         success: false,
         message: `Failed to get project id: ${response.statusText}`,
       };
     }
     const json = await response.json();
-
     return {
       success: true,
       data: json as Settings,
