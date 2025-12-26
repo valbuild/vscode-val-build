@@ -101,7 +101,7 @@ export async function updateStatusBar(
 
   const tokenPath = getPersonalAccessTokenPath(projectDir);
   if (!fs.existsSync(tokenPath)) {
-    statusBarItem.text = `$(account) Val: not logged in`;
+    statusBarItem.text = `$(account) (Val) not logged in`;
     statusBarItem.show();
     return;
   }
@@ -109,7 +109,7 @@ export async function updateStatusBar(
   try {
     const json = JSON.parse(fs.readFileSync(tokenPath, "utf8"));
     if (json?.profile?.username) {
-      statusBarItem.text = `$(account) Val: ${json.profile.username}`;
+      statusBarItem.text = `$(account) (Val) ${json.profile.username}`;
       statusBarItem.show();
     } else {
       statusBarItem.text = `$(account) Unknown user`;

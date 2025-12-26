@@ -28,7 +28,7 @@
     "commands": [
       {
         "command": "val.login",
-        "title": "Val: Log In"
+        "title": "Log In To Val"
       }
     ],
     "configuration": {
