@@ -39,7 +39,7 @@ export async function getProjectSettings(
       status: "login-required",
     };
   }
-  console.log("Fetching project settings for project:", projectName, loginData);
+  console.log("Fetching project settings for project:", projectName);
   const auth = { pat: loginData.pat };
   const result = await fetchProjectSettings(projectName, auth);
   console.log("Fetch project settings result:", result);
