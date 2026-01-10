@@ -34,6 +34,48 @@ import fs from "fs";
 import { stackToLine } from "./stackToLine";
 import { error } from "console";
 import { getFileExt } from "./getFileExt";
+import { findValModulesFile, getValModules } from "./valModules";
+
+// Simplified service interface - independent of @valbuild/server Service
+interface ValService {
+  read: (
+    moduleFilePath: ModuleFilePath,
+    modulePath: ModulePath,
+    options?: {
+      validate: boolean;
+      source: boolean;
+      schema: boolean;
+    }
+  ) => Promise<
+    | {
+        source: Source;
+        schema: SerializedSchema;
+        path: SourcePath;
+        errors: false;
+      }
+    | {
+        source?: Source;
+        schema?: SerializedSchema;
+        path: SourcePath;
+        errors: {
+          invalidModulePath?: ModuleFilePath;
+          validation?:
+            | false
+            | {
+                [sourcePath: string]: Array<{
+                  message: string;
+                  fixes?: string[];
+                  value?: any;
+                }>;
+              };
+          fatal?: Array<{
+            message: string;
+            stack?: string;
+          }>;
+        };
+      }
+  >;
+}
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -48,7 +90,10 @@ let hasDiagnosticRelatedInformationCapability = false;
 const cache = new Map<string, any>();
 let valRoots: string[] = [];
 let servicesByValRoot: {
-  [valRoot: string]: Service;
+  [valRoot: string]: ValService;
+} = {};
+let valModulesFilesByValRoot: {
+  [valRoot: string]: string;
 } = {};
 connection.onInitialize(async (params: InitializeParams) => {
   const capabilities = params.capabilities;
@@ -69,6 +114,7 @@ connection.onInitialize(async (params: InitializeParams) => {
 
   // TODO: we are using file directories etc at the FILE SYSTEM level. We could create a host FS for VS Code, but it was easier to use FS to get started
   const valConfigFiles = [];
+  const valModulesFiles = [];
   const packageJsonFiles = [];
   for (const workspaceFolder of params.workspaceFolders || []) {
     valConfigFiles.push(
@@ -77,43 +123,40 @@ connection.onInitialize(async (params: InitializeParams) => {
         {}
       ))
     );
+    valModulesFiles.push(
+      ...(await glob(
+        `${uriToFsPath(workspaceFolder.uri)}/**/val.modules.{t,j}s`,
+        {}
+      ))
+    );
     packageJsonFiles.push(
       ...(await glob(`${uriToFsPath(workspaceFolder.uri)}/**/package.json`, {}))
     );
   }
   valRoots = getValRoots(valConfigFiles, packageJsonFiles);
+
+  // Map val.modules files to their respective valRoots
+  valModulesFilesByValRoot = {};
+  for (const valRoot of valRoots) {
+    const valModulesFile = findValModulesFile(valRoot, valModulesFiles);
+    if (valModulesFile) {
+      valModulesFilesByValRoot[valRoot] = valModulesFile;
+      console.log(
+        `Found val.modules file for root '${valRoot}': ${valModulesFile}`
+      );
+    }
+  }
+
+  // Create file system abstraction for Val services
+  const cachedFileSystem = createCachedFileSystem(cache);
+
+  // Initialize services for each Val root
   servicesByValRoot = Object.fromEntries(
     await Promise.all(
       valRoots
         .filter((valRoot) => !valRoot.includes("node_modules"))
         .map(async (valRoot) => {
-          console.log("Initializing Val Service for: '" + valRoot + "'...");
-          const service = await createService(
-            valRoot,
-            {
-              disableCache: true,
-            },
-            {
-              ...ts.sys,
-              rmFile: fs.unlinkSync,
-              readFile(path) {
-                if (cache.has(path)) {
-                  return cache.get(path);
-                }
-                const content = fs.readFileSync(path, "utf8");
-                cache.set(path, content);
-                return content;
-              },
-              writeFile(fileName, data, encoding) {
-                if (typeof data !== "string") {
-                  fs.writeFileSync(fileName, data.toString("utf-8"), encoding);
-                } else {
-                  fs.writeFileSync(fileName, data, encoding);
-                }
-              },
-            }
-          );
-          console.log("Created Val Service! Root: '" + valRoot + "'");
+          const service = await initializeService(valRoot, cachedFileSystem);
           return [valRoot, service];
         })
     )
@@ -233,6 +276,63 @@ function uriToFsPath(uri: string): string {
   return uri.replace("file://", "");
 }
 
+// File system operations abstraction for Val service
+interface ValFileSystem {
+  readFile: (path: string) => string | undefined;
+  writeFile: (fileName: string, data: string | Buffer, encoding?: any) => void;
+  rmFile: (path: string) => void;
+}
+
+// Create a cached file system implementation
+function createCachedFileSystem(cache: Map<string, any>): ValFileSystem {
+  return {
+    readFile(filePath: string): string | undefined {
+      if (cache.has(filePath)) {
+        return cache.get(filePath);
+      }
+      const content = fs.readFileSync(filePath, "utf8");
+      cache.set(filePath, content);
+      return content;
+    },
+    writeFile(fileName: string, data: string | Buffer, encoding?: any): void {
+      if (typeof data !== "string") {
+        fs.writeFileSync(fileName, data.toString("utf-8"), encoding as any);
+      } else {
+        fs.writeFileSync(fileName, data, encoding as any);
+      }
+    },
+    rmFile: fs.unlinkSync,
+  };
+}
+
+// Initialize a service for a given root directory
+// TODO: This will be replaced with a custom implementation
+async function initializeService(
+  valRoot: string,
+  fileSystem: ValFileSystem
+): Promise<ValService> {
+  console.log("Initializing Val Service for: '" + valRoot + "'...");
+  const service = await createService(
+    valRoot,
+    {
+      disableCache: true,
+    },
+    {
+      ...ts.sys,
+      rmFile: fileSystem.rmFile,
+      readFile: fileSystem.readFile,
+      writeFile: fileSystem.writeFile,
+    }
+  );
+  console.log("Created Val Service! Root: '" + valRoot + "'");
+
+  // Return simplified interface with just the read method
+  return {
+    read: (moduleFilePath, modulePath, options) =>
+      service.get(moduleFilePath, modulePath, options),
+  };
+}
+
 const textEncoder = new TextEncoder();
 async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   const text = textDocument.getText();
@@ -244,12 +344,14 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   const isValRelatedFile =
     isValModule ||
     fsPath.includes("val.config.ts") ||
-    fsPath.includes("val.config.js");
+    fsPath.includes("val.config.js") ||
+    fsPath.includes("val.modules.ts") ||
+    fsPath.includes("val.modules.js");
   if (isValRelatedFile) {
     cache.set(fsPath, text);
   }
   if (valRoot && service && isValModule) {
-    const { source, schema, errors } = await service.get(
+    const { source, schema, errors } = await service.read(
       fsPath.replace(valRoot, "") as ModuleFilePath,
       "" as ModulePath
     );
@@ -387,7 +489,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                       Internal.splitModuleFilePathAndModulePath(
                         sourcePath as SourcePath
                       );
-                    const refModule = await service.get(
+                    const refModule = await service.read(
                       moduleFilePath,
                       modulePath
                     );
