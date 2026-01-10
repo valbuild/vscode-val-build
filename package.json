@@ -7,7 +7,7 @@
   "version": "1.0.19",
   "repository": {
     "type": "git",
-    "url": "https://github.com/valbuild/vscode-val-build"
+    "url": "git+https://github.com/valbuild/vscode-val-build.git"
   },
   "publisher": "valbuild",
   "categories": [],
