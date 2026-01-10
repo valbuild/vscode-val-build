@@ -13,7 +13,6 @@ import {
   InitializeResult,
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
-import { Service, createService } from "@valbuild/server";
 import {
   FILE_REF_PROP,
   FileSource,
@@ -34,7 +33,12 @@ import fs from "fs";
 import { stackToLine } from "./stackToLine";
 import { error } from "console";
 import { getFileExt } from "./getFileExt";
-import { findValModulesFile, getValModules } from "./valModules";
+import {
+  findValModulesFile,
+  createValModulesRuntime,
+  evaluateValModulesFile,
+  ValModuleResult,
+} from "./valModules";
 
 // Simplified service interface - independent of @valbuild/server Service
 interface ValService {
@@ -94,6 +98,9 @@ let servicesByValRoot: {
 } = {};
 let valModulesFilesByValRoot: {
   [valRoot: string]: string;
+} = {};
+let runtimesByValRoot: {
+  [valRoot: string]: ReturnType<typeof createValModulesRuntime>;
 } = {};
 connection.onInitialize(async (params: InitializeParams) => {
   const capabilities = params.capabilities;
@@ -306,31 +313,216 @@ function createCachedFileSystem(cache: Map<string, any>): ValFileSystem {
 }
 
 // Initialize a service for a given root directory
-// TODO: This will be replaced with a custom implementation
 async function initializeService(
   valRoot: string,
   fileSystem: ValFileSystem
 ): Promise<ValService> {
   console.log("Initializing Val Service for: '" + valRoot + "'...");
-  const service = await createService(
-    valRoot,
-    {
-      disableCache: true,
+
+  // Find tsconfig.json or jsconfig.json
+  const configPath = findConfigFile(valRoot);
+  if (!configPath) {
+    console.error(`No tsconfig.json or jsconfig.json found for: ${valRoot}`);
+    throw new Error(`No config file found for Val root: ${valRoot}`);
+  }
+
+  // Create custom host that uses our cached file system
+  const host: ts.ParseConfigHost = {
+    readDirectory: ts.sys.readDirectory,
+    fileExists: (fileName: string) => {
+      try {
+        return ts.sys.fileExists(fileName);
+      } catch {
+        return false;
+      }
     },
-    {
-      ...ts.sys,
-      rmFile: fileSystem.rmFile,
-      readFile: fileSystem.readFile,
-      writeFile: fileSystem.writeFile,
-    }
-  );
+    readFile: (fileName: string) => {
+      try {
+        return fileSystem.readFile(fileName);
+      } catch {
+        return undefined;
+      }
+    },
+    useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+  };
+
+  // Create runtime with custom host
+  const runtime = createValModulesRuntime(host, configPath);
+
+  // Store runtime for cache invalidation
+  runtimesByValRoot[valRoot] = runtime;
+
+  // Get val.modules file path
+  const valModulesFile = valModulesFilesByValRoot[valRoot];
+  if (!valModulesFile) {
+    console.error(`No val.modules file found for: ${valRoot}`);
+    throw new Error(`No val.modules file found for Val root: ${valRoot}`);
+  }
+
   console.log("Created Val Service! Root: '" + valRoot + "'");
 
-  // Return simplified interface with just the read method
-  return {
-    read: (moduleFilePath, modulePath, options) =>
-      service.get(moduleFilePath, modulePath, options),
+  // Helper to get fresh module evaluation
+  const getModules = async (): Promise<ValModuleResult[] | null> => {
+    return await evaluateValModulesFile(runtime, valModulesFile);
   };
+
+  // Return service interface
+  return {
+    read: async (moduleFilePath, modulePath, options) => {
+      try {
+        // Evaluate modules (will use runtime cache for unchanged files)
+        const modules = await getModules();
+
+        if (!modules) {
+          return {
+            path: (moduleFilePath + modulePath) as SourcePath,
+            errors: {
+              fatal: [
+                {
+                  message: "Failed to evaluate val.modules file",
+                },
+              ],
+            },
+          };
+        }
+
+        // Filter out modules that failed to load (have undefined paths)
+        const validModules = modules.filter((m) => m.path !== undefined);
+        const failedModules = modules.filter((m) => m.path === undefined);
+
+        // Find the matching module
+        const normalizedModuleFilePath = moduleFilePath.startsWith("/")
+          ? moduleFilePath
+          : "/" + moduleFilePath;
+
+        const matchingModule = validModules.find(
+          (m) => m.path === normalizedModuleFilePath
+        );
+
+        if (!matchingModule) {
+          // Check if this module is one of the failed modules
+          const isFailedModule = failedModules.some(
+            (m) =>
+              m.message &&
+              (m.message.includes("Maximum call stack") ||
+                m.message.includes("circular dependency"))
+          );
+
+          if (isFailedModule || failedModules.length > 0) {
+            return {
+              path: (moduleFilePath + modulePath) as SourcePath,
+              errors: {
+                fatal: [
+                  {
+                    message: `Module failed to load. This is likely due to a circular dependency in your modules. ${
+                      failedModules.length
+                    } module(s) failed: ${failedModules
+                      .map((m) => m.message || "unknown")
+                      .join(", ")}`,
+                  },
+                ],
+              },
+            };
+          }
+
+          return {
+            path: (moduleFilePath + modulePath) as SourcePath,
+            errors: {
+              invalidModulePath: moduleFilePath,
+            },
+          };
+        }
+
+        // Check for runtime errors
+        if (matchingModule.runtimeError) {
+          return {
+            path: (moduleFilePath + modulePath) as SourcePath,
+            errors: {
+              fatal: [
+                {
+                  message: matchingModule.message || "Runtime error in module",
+                },
+              ],
+            },
+          };
+        }
+
+        // Check if there are validation errors
+        const hasValidationErrors =
+          matchingModule.validation &&
+          Object.keys(matchingModule.validation).length > 0;
+
+        // Return result with or without validation errors
+        if (matchingModule.schema && matchingModule.source) {
+          return {
+            source: matchingModule.source,
+            schema: matchingModule.schema,
+            path: (moduleFilePath + modulePath) as SourcePath,
+            errors: hasValidationErrors
+              ? {
+                  validation: matchingModule.validation,
+                }
+              : false,
+          };
+        }
+
+        // Return result with validation errors (when schema or source is missing)
+        return {
+          source: matchingModule.source,
+          schema: matchingModule.schema,
+          path: (moduleFilePath + modulePath) as SourcePath,
+          errors: {
+            validation: matchingModule.validation || false,
+          },
+        };
+      } catch (err) {
+        console.error("Error reading module:", err);
+        return {
+          path: (moduleFilePath + modulePath) as SourcePath,
+          errors: {
+            fatal: [
+              {
+                message: err instanceof Error ? err.message : "Unknown error",
+                stack: err instanceof Error ? err.stack : undefined,
+              },
+            ],
+          },
+        };
+      }
+    },
+  };
+}
+
+// Find tsconfig.json or jsconfig.json by walking up the directory tree
+function findConfigFile(startPath: string): string | null {
+  let currentDir = startPath;
+
+  // Walk up the directory tree
+  while (true) {
+    // Check for tsconfig.json first
+    const tsconfigPath = path.join(currentDir, "tsconfig.json");
+    if (fs.existsSync(tsconfigPath)) {
+      return tsconfigPath;
+    }
+
+    // Check for jsconfig.json
+    const jsconfigPath = path.join(currentDir, "jsconfig.json");
+    if (fs.existsSync(jsconfigPath)) {
+      return jsconfigPath;
+    }
+
+    // Move up one directory
+    const parentDir = path.dirname(currentDir);
+
+    // If we've reached the root, stop
+    if (parentDir === currentDir) {
+      break;
+    }
+
+    currentDir = parentDir;
+  }
+
+  return null;
 }
 
 const textEncoder = new TextEncoder();
@@ -338,23 +530,41 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   const text = textDocument.getText();
   let diagnostics: Diagnostic[] = [];
   const fsPath = decodeURIComponent(uriToFsPath(textDocument.uri));
+
   const valRoot = valRoots?.find((valRoot) => fsPath.startsWith(valRoot));
   const service = valRoot ? servicesByValRoot[valRoot] : undefined;
   const isValModule = fsPath.includes(".val.ts") || fsPath.includes(".val.js");
+
   const isValRelatedFile =
     isValModule ||
     fsPath.includes("val.config.ts") ||
     fsPath.includes("val.config.js") ||
     fsPath.includes("val.modules.ts") ||
     fsPath.includes("val.modules.js");
+
   if (isValRelatedFile) {
     cache.set(fsPath, text);
+
+    // Invalidate runtime cache for this file
+    if (valRoot && runtimesByValRoot[valRoot]) {
+      runtimesByValRoot[valRoot].invalidateFile(fsPath);
+
+      // Also invalidate the system file that runs validation
+      // This ensures validation is re-run with fresh data
+      const valModulesFile = valModulesFilesByValRoot[valRoot];
+      if (valModulesFile) {
+        const valModulesDir = path.dirname(valModulesFile);
+        const systemFile = path.join(valModulesDir, "<system>.ts");
+        runtimesByValRoot[valRoot].invalidateFile(systemFile);
+      }
+    }
   }
   if (valRoot && service && isValModule) {
     const { source, schema, errors } = await service.read(
       fsPath.replace(valRoot, "") as ModuleFilePath,
       "" as ModulePath
     );
+
     if (errors && errors.fatal) {
       for (const error of errors.fatal || []) {
         if (error.stack) {
@@ -419,27 +629,36 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                   error.fixes?.includes("image:upload-remote") ||
                   error.fixes?.includes("file:upload-remote"))
               ) {
-                const { source: sourceAtPath } = Internal.resolvePath(
-                  modulePath,
-                  source,
-                  schema
-                );
-                const ref = (sourceAtPath as FileSource)[FILE_REF_PROP];
-                const absFilePath = path.join(valRoot, ...ref.split("/"));
-                if (!fs.existsSync(absFilePath)) {
-                  const diagnostic: Diagnostic = {
-                    severity: DiagnosticSeverity.Error,
-                    range,
-                    code: "file-not-found",
-                    message: "File " + absFilePath + " does not exist",
-                    source: "val",
-                  };
-                  diagnostics = [diagnostic];
-                  connection.sendDiagnostics({
-                    uri: textDocument.uri,
-                    diagnostics,
-                  });
-                  return;
+                try {
+                  const { source: sourceAtPath } = Internal.resolvePath(
+                    modulePath,
+                    source,
+                    schema
+                  );
+                  const ref = (sourceAtPath as FileSource)[FILE_REF_PROP];
+                  const absFilePath = path.join(valRoot, ...ref.split("/"));
+                  if (!fs.existsSync(absFilePath)) {
+                    const diagnostic: Diagnostic = {
+                      severity: DiagnosticSeverity.Error,
+                      range,
+                      code: "file-not-found",
+                      message: "File " + absFilePath + " does not exist",
+                      source: "val",
+                    };
+                    diagnostics = [diagnostic];
+                    connection.sendDiagnostics({
+                      uri: textDocument.uri,
+                      diagnostics,
+                    });
+                    return;
+                  }
+                } catch (err) {
+                  console.error(
+                    `[ERROR] Failed to resolve path for modulePath: ${modulePath}`,
+                    err
+                  );
+                  // Don't crash - just skip this diagnostic
+                  continue;
                 }
               }
               // Skipping these for now, since we do not have hot fix yet
@@ -514,57 +733,67 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                   // );
                   diagnostics.push(diagnostic);
                 } else if (source && schema && uploadRemoteFileFix) {
-                  const {
-                    source: resolvedSourceAtPath,
-                    schema: resolvedSchemaAtPath,
-                  } = Internal.resolvePath(modulePath, source, schema);
-                  const filePath = (resolvedSourceAtPath as any)?.[
-                    FILE_REF_PROP
-                  ];
-                  if (typeof filePath !== "string") {
+                  try {
+                    const {
+                      source: resolvedSourceAtPath,
+                      schema: resolvedSchemaAtPath,
+                    } = Internal.resolvePath(modulePath, source, schema);
+                    const filePath = (resolvedSourceAtPath as any)?.[
+                      FILE_REF_PROP
+                    ];
+                    if (typeof filePath !== "string") {
+                      console.error(
+                        "Expected filePath to be a string, but found " +
+                          typeof filePath,
+                        "in",
+                        JSON.stringify(source)
+                      );
+                      continue;
+                    }
+                    if (
+                      resolvedSchemaAtPath.type !== "file" &&
+                      resolvedSchemaAtPath.type !== "image"
+                    ) {
+                      console.error(
+                        "Expected schema to be a file or image, but found " +
+                          resolvedSchemaAtPath.type,
+                        "in",
+                        JSON.stringify(source)
+                      );
+                      return;
+                    }
+                    const fileExt = getFileExt(filePath);
+                    const metadata = (resolvedSourceAtPath as any).metadata;
+                    const fileHash = Internal.remote.getFileHash(
+                      fs.readFileSync(
+                        path.join(valRoot, ...filePath.split("/"))
+                      ) as Buffer
+                    );
+                    diagnostic.code =
+                      uploadRemoteFileFix +
+                      ":" +
+                      // TODO: figure out a different way to send the ValidationHash - we need it when creating refs in the client extension which is why we do it like this now...
+                      Internal.remote.getValidationHash(
+                        Internal.VERSION.core || "unknown",
+                        resolvedSchemaAtPath as
+                          | SerializedFileSchema
+                          | SerializedImageSchema,
+                        fileExt,
+                        metadata,
+                        fileHash,
+                        textEncoder
+                      );
+                    diagnostic.message =
+                      "Expected remote file, but found local";
+                    diagnostics.push(diagnostic);
+                  } catch (err) {
                     console.error(
-                      "Expected filePath to be a string, but found " +
-                        typeof filePath,
-                      "in",
-                      JSON.stringify(source)
+                      `[ERROR] Failed to resolve path for uploadRemoteFileFix - modulePath: ${modulePath}`,
+                      err
                     );
-                    return;
+                    // Don't crash - just skip this diagnostic
+                    continue;
                   }
-                  if (
-                    resolvedSchemaAtPath.type !== "file" &&
-                    resolvedSchemaAtPath.type !== "image"
-                  ) {
-                    console.error(
-                      "Expected schema to be a file or image, but found " +
-                        resolvedSchemaAtPath.type,
-                      "in",
-                      JSON.stringify(source)
-                    );
-                    return;
-                  }
-                  const fileExt = getFileExt(filePath);
-                  const metadata = (resolvedSourceAtPath as any).metadata;
-                  const fileHash = Internal.remote.getFileHash(
-                    fs.readFileSync(
-                      path.join(valRoot, ...filePath.split("/"))
-                    ) as Buffer
-                  );
-                  diagnostic.code =
-                    uploadRemoteFileFix +
-                    ":" +
-                    // TODO: figure out a different way to send the ValidationHash - we need it when creating refs in the client extension which is why we do it like this now...
-                    Internal.remote.getValidationHash(
-                      Internal.VERSION.core || "unknown",
-                      resolvedSchemaAtPath as
-                        | SerializedFileSchema
-                        | SerializedImageSchema,
-                      fileExt,
-                      metadata,
-                      fileHash,
-                      textEncoder
-                    );
-                  diagnostic.message = "Expected remote file, but found local";
-                  diagnostics.push(diagnostic);
                 } else if (source && schema && downloadRemoteFileFix) {
                   diagnostic.message = "Expected locale file, but found remote";
                   diagnostic.code = downloadRemoteFileFix;

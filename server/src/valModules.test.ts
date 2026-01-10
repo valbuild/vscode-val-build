@@ -1,8 +1,11 @@
 import assert from "assert";
 import path from "path";
+import ts from "typescript";
 import {
   findValModulesFile,
   evaluateValModulesFile,
+  evaluateValModulesFileWithFileSystem,
+  createValModulesRuntime,
   getValModules,
 } from "./valModules";
 
@@ -91,7 +94,7 @@ describe("valModules", () => {
   // });
 
   describe("getValModules", () => {
-    it("should get evaluated modules for a valRoot", async () => {
+    it("should get evaluated and processed modules for a valRoot", async () => {
       const valRoot = fixturesDir;
       const valModulesFilesByValRoot = {
         [valRoot]: valModulesPath,
@@ -99,10 +102,25 @@ describe("valModules", () => {
 
       const result = await getValModules(valRoot, valModulesFilesByValRoot);
 
-      assert.ok(result, "Should return evaluated modules");
-      assert.ok(result.default, "Should have default export");
-      assert.ok(result.default.testOne, "Should have testOne module");
-      assert.ok(result.default.testTwo, "Should have testTwo module");
+      assert.ok(result, "Should return processed modules");
+      assert.ok(Array.isArray(result), "Should return an array");
+      assert.strictEqual(result.length, 2, "Should have 2 modules");
+
+      // Check first module
+      const module1 = result.find((m) => m.path.includes("test-one"));
+      assert.ok(module1, "Should have test-one module");
+      assert.ok(module1.schema, "Should have schema");
+      assert.ok(module1.source, "Should have source");
+      assert.strictEqual(module1.runtimeError, false, "Should not have runtime error");
+      assert.strictEqual(module1.defaultExport, true, "Should have default export");
+
+      // Check second module
+      const module2 = result.find((m) => m.path.includes("test-two"));
+      assert.ok(module2, "Should have test-two module");
+      assert.ok(module2.schema, "Should have schema");
+      assert.ok(module2.source, "Should have source");
+      assert.strictEqual(module2.runtimeError, false, "Should not have runtime error");
+      assert.strictEqual(module2.defaultExport, true, "Should have default export");
     });
 
     it("should return null if no val.modules file exists for valRoot", async () => {
@@ -112,6 +130,99 @@ describe("valModules", () => {
       const result = await getValModules(valRoot, valModulesFilesByValRoot);
 
       assert.strictEqual(result, null, "Should return null when not found");
+    });
+  });
+
+  describe("evaluateValModulesFile", () => {
+    it("should evaluate and process val.modules file with runtime", async () => {
+      // Find tsconfig and create runtime
+      const configPath = path.join(fixturesDir, "../../tsconfig.json");
+      const host: ts.ParseConfigHost = {
+        readDirectory: ts.sys.readDirectory,
+        fileExists: ts.sys.fileExists,
+        readFile: ts.sys.readFile,
+        useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+      };
+      
+      const runtime = createValModulesRuntime(host, configPath);
+      const result = await evaluateValModulesFile(runtime, valModulesPath);
+
+      assert.ok(result, "Should return processed modules");
+      assert.ok(Array.isArray(result), "Should return an array");
+      assert.strictEqual(result.length, 2, "Should have 2 modules");
+
+      // Verify each module has the expected structure
+      for (const module of result) {
+        assert.ok(module.path, "Module should have path");
+        assert.ok(typeof module.runtimeError === "boolean", "Should have runtimeError flag");
+        assert.ok(typeof module.defaultExport === "boolean", "Should have defaultExport flag");
+        
+        if (!module.runtimeError) {
+          assert.ok(module.schema, "Non-error module should have schema");
+          assert.ok(module.source, "Non-error module should have source");
+        }
+      }
+    });
+  });
+
+  describe("evaluateValModulesFileWithFileSystem", () => {
+    it("should evaluate and process val.modules file using file system", async () => {
+      const result = await evaluateValModulesFileWithFileSystem(valModulesPath);
+
+      assert.ok(result, "Should return processed modules");
+      assert.ok(Array.isArray(result), "Should return an array");
+      assert.strictEqual(result.length, 2, "Should have 2 modules");
+
+      // Verify each module has the expected structure
+      for (const module of result) {
+        assert.ok(module.path, "Module should have path");
+        assert.ok(typeof module.runtimeError === "boolean", "Should have runtimeError flag");
+        assert.ok(typeof module.defaultExport === "boolean", "Should have defaultExport flag");
+        
+        if (!module.runtimeError) {
+          assert.ok(module.schema, "Non-error module should have schema");
+          assert.ok(module.source, "Non-error module should have source");
+        }
+      }
+    });
+
+    it("should return null if config file not found", async () => {
+      const invalidPath = "/tmp/non-existent-file.ts";
+      const result = await evaluateValModulesFileWithFileSystem(invalidPath);
+
+      assert.strictEqual(result, null, "Should return null when config not found");
+    });
+  });
+
+  describe("createValModulesRuntime", () => {
+    it("should create a runtime with custom host", () => {
+      const configPath = path.join(fixturesDir, "../../tsconfig.json");
+      const host: ts.ParseConfigHost = {
+        readDirectory: ts.sys.readDirectory,
+        fileExists: ts.sys.fileExists,
+        readFile: ts.sys.readFile,
+        useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+      };
+
+      const runtime = createValModulesRuntime(host, configPath);
+      
+      assert.ok(runtime, "Should return a runtime instance");
+      assert.ok(typeof runtime.run === "function", "Runtime should have run method");
+      assert.ok(typeof runtime.invalidateFile === "function", "Runtime should have invalidateFile method");
+    });
+
+    it("should throw error if config file is invalid", () => {
+      const invalidConfigPath = "/tmp/invalid-tsconfig.json";
+      const host: ts.ParseConfigHost = {
+        readDirectory: ts.sys.readDirectory,
+        fileExists: () => true,
+        readFile: () => "invalid json {{{",
+        useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+      };
+
+      assert.throws(() => {
+        createValModulesRuntime(host, invalidConfigPath);
+      }, /Error reading tsconfig/);
     });
   });
 

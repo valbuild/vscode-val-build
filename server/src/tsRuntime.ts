@@ -1,6 +1,7 @@
 import ts from "typescript";
 import path from "node:path";
 import vm from "node:vm";
+import { createRequire } from "node:module";
 
 export function loadTsConfig(tsconfigPath: string, host: ts.ParseConfigHost) {
   const configFile = ts.readConfigFile(tsconfigPath, host.readFile);
@@ -21,7 +22,9 @@ export function createTsVmRuntime(opts: {
     ...opts.compilerOptions,
     target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.CommonJS, // Use CommonJS for in-memory execution
-    moduleResolution: ts.ModuleResolutionKind.NodeNext,
+    // Preserve original moduleResolution if set, otherwise use NodeNext
+    moduleResolution:
+      opts.compilerOptions.moduleResolution || ts.ModuleResolutionKind.NodeNext,
     noEmit: false, // Override noEmit from tsconfig
     noEmitOnError: false,
     sourceMap: false,
@@ -65,14 +68,17 @@ export function createTsVmRuntime(opts: {
       loaded: false,
     };
 
+    // Create a require function that resolves from the project directory
+    const projectRequire = createRequire(filename);
+
     const customRequire = (specifier: string) => {
-      if (
-        specifier.startsWith("node:") ||
-        (!specifier.startsWith(".") && !path.isAbsolute(specifier))
-      ) {
+      // Handle node: protocol
+      if (specifier.startsWith("node:")) {
         return require(specifier);
       }
 
+      // First, try TypeScript module resolution for all specifiers
+      // This handles relative paths, absolute paths, AND path mappings (like @/...)
       const resolved = ts.resolveModuleName(
         specifier,
         filename,
@@ -80,15 +86,72 @@ export function createTsVmRuntime(opts: {
         opts.host
       );
 
-      if (!resolved.resolvedModule) {
-        throw new Error(`Cannot resolve module: ${specifier} from ${filename}`);
+      // Debug: Log resolution attempts for path-mapped modules
+      if (resolved.resolvedModule) {
+        console.log(
+          `Resolved ${specifier} to ${resolved.resolvedModule.resolvedFileName}`
+        );
+      } else if (
+        compilerOptions.paths &&
+        !specifier.startsWith(".") &&
+        !specifier.startsWith("node:")
+      ) {
+        console.log(`Failed to resolve ${specifier} from ${filename}`);
+        console.log(
+          `Available paths:`,
+          Object.keys(compilerOptions.paths || {})
+        );
+        console.log(`Base URL:`, compilerOptions.baseUrl);
       }
 
-      const resolvedFile = path.normalize(
-        resolved.resolvedModule.resolvedFileName
-      );
-      const code = getJsCode(resolvedFile);
-      return loadModule(code, resolvedFile);
+      // If TypeScript resolved it to a file, load it
+      if (resolved.resolvedModule) {
+        const resolvedFile = path.normalize(
+          resolved.resolvedModule.resolvedFileName
+        );
+
+        // If it resolved to a .d.ts file from node_modules, use projectRequire
+        // because we need the actual implementation, not the type definitions
+        if (
+          (resolvedFile.endsWith(".d.ts") ||
+            resolvedFile.endsWith(".d.mts") ||
+            resolvedFile.endsWith(".d.cts")) &&
+          resolvedFile.includes("node_modules") &&
+          !specifier.startsWith(".") &&
+          !path.isAbsolute(specifier)
+        ) {
+          try {
+            return projectRequire(specifier);
+          } catch (error) {
+            throw new Error(
+              `Cannot load module '${specifier}' - TypeScript resolved to ${resolvedFile} but the implementation could not be loaded. ` +
+                `Error: ${
+                  error instanceof Error ? error.message : String(error)
+                }`
+            );
+          }
+        }
+
+        const code = getJsCode(resolvedFile);
+        return loadModule(code, resolvedFile);
+      }
+
+      // If TypeScript couldn't resolve it and it's not a relative/absolute path,
+      // try loading it as an external module from node_modules
+      if (!specifier.startsWith(".") && !path.isAbsolute(specifier)) {
+        try {
+          return projectRequire(specifier);
+        } catch (error) {
+          // If module can't be found in project, throw a clear error
+          throw new Error(
+            `Cannot find module '${specifier}' from ${filename}. ` +
+              `Make sure the module is installed in the project's node_modules.`
+          );
+        }
+      }
+
+      // If we get here, we couldn't resolve it
+      throw new Error(`Cannot resolve module: ${specifier} from ${filename}`);
     };
 
     const customImport = (specifier: string) => {
@@ -175,6 +238,14 @@ ${code}
 }
 
 function shouldTranspileFile(fileName: string) {
+  // Don't transpile .d.ts files (type declarations)
+  if (
+    fileName.endsWith(".d.ts") ||
+    fileName.endsWith(".d.mts") ||
+    fileName.endsWith(".d.cts")
+  ) {
+    return false;
+  }
   return (
     fileName.endsWith(".ts") ||
     fileName.endsWith(".tsx") ||
