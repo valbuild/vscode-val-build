@@ -46,49 +46,9 @@ import {
   ValModuleResult,
 } from "./valModules";
 import { isFileInValModulesAST } from "./isFileInValModulesAST";
-
-// Simplified service interface - independent of @valbuild/server Service
-interface ValService {
-  read: (
-    moduleFilePath: ModuleFilePath,
-    modulePath: ModulePath,
-    options?: {
-      validate: boolean;
-      source: boolean;
-      schema: boolean;
-    }
-  ) => Promise<
-    | {
-        source: Source;
-        schema: SerializedSchema;
-        path: SourcePath;
-        errors: false;
-      }
-    | {
-        source?: Source;
-        schema?: SerializedSchema;
-        path: SourcePath;
-        errors: {
-          invalidModulePath?: ModuleFilePath;
-          validation?:
-            | false
-            | {
-                [sourcePath: string]: Array<{
-                  message: string;
-                  fixes?: string[];
-                  value?: any;
-                }>;
-              };
-          fatal?: Array<{
-            message: string;
-            stack?: string;
-          }>;
-        };
-      }
-  >;
-  getAllModulePaths: () => Promise<string[]>;
-  getAllModules: () => Promise<ValModuleResult[]>;
-}
+import { detectCompletionContext, isValFile } from "./completionContext";
+import { CompletionProviderRegistry } from "./completionProviders";
+import { ValService } from "./types";
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -115,6 +75,9 @@ let runtimesByValRoot: {
 let moduleIndexMappingsByValRoot: {
   [valRoot: string]: Map<string, number>; // path -> index
 } = {};
+// Initialize completion provider registry
+const completionProviderRegistry = new CompletionProviderRegistry();
+
 connection.onInitialize(async (params: InitializeParams) => {
   const capabilities = params.capabilities;
 
@@ -1204,22 +1167,59 @@ connection.onDidChangeWatchedFiles((_change) => {
 
 // This handler provides the initial list of the completion items.
 connection.onCompletion(
-  (_textDocumentPosition: TextDocumentPositionParams): CompletionItem[] => {
-    // The pass parameter contains the position of the text document in
-    // which code complete got requested. For the example we ignore this
-    // info and always provide the same completion items.
-    return [
-      {
-        label: "TypeScript",
-        kind: CompletionItemKind.Text,
-        data: 1,
-      },
-      {
-        label: "JavaScript",
-        kind: CompletionItemKind.Text,
-        data: 2,
-      },
-    ];
+  async (
+    textDocumentPosition: TextDocumentPositionParams
+  ): Promise<CompletionItem[]> => {
+    const document = documents.get(textDocumentPosition.textDocument.uri);
+    if (!document) {
+      return [];
+    }
+
+    const fsPath = decodeURIComponent(
+      uriToFsPath(textDocumentPosition.textDocument.uri)
+    );
+
+    // Only provide completion for .val.ts or .val.js files
+    if (!isValFile(fsPath)) {
+      return [];
+    }
+
+    const valRoot = valRoots?.find((valRoot) => fsPath.startsWith(valRoot));
+    if (!valRoot) {
+      return [];
+    }
+
+    const service = servicesByValRoot[valRoot];
+    if (!service) {
+      return [];
+    }
+
+    const text = document.getText();
+    const position = textDocumentPosition.position;
+
+    // Parse the document to detect context
+    const sourceFile = ts.createSourceFile(
+      fsPath,
+      text,
+      ts.ScriptTarget.Latest,
+      true
+    );
+
+    // Detect the completion context
+    const context = detectCompletionContext(sourceFile, position);
+
+    // Get completion items from the appropriate provider
+    // The context detection already checks if it's a router schema for router completion
+    if (context.type !== "none") {
+      const items = await completionProviderRegistry.getCompletionItems(
+        context,
+        service,
+        valRoot
+      );
+      return items;
+    }
+
+    return [];
   }
 );
 
