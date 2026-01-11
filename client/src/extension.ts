@@ -99,7 +99,7 @@ export function activate(context: ExtensionContext) {
     ],
     synchronize: {
       fileEvents: workspace.createFileSystemWatcher(
-        "**/*.val.t{s,s},**/val.config.{t,j}s"
+        "**/*.val.{t,j}s,**/val.config.{t,j}s,**/val.modules.{t,j}s"
       ),
     },
   };
