@@ -707,6 +707,25 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
             validateTextDocument(doc);
           }
         });
+      } else if (isValModule) {
+        // If a .val file changed, revalidate all other open .val files
+        // since they might depend on this file's schema (e.g., via keyOf)
+        console.log(
+          `Val module changed: ${fsPath}, revalidating dependent files for: ${valRoot}`
+        );
+        documents.all().forEach((doc) => {
+          const docPath = decodeURIComponent(uriToFsPath(doc.uri));
+          // Skip the current file (it will be validated anyway)
+          // and only revalidate other .val files in the same valRoot
+          if (
+            docPath !== fsPath &&
+            docPath.startsWith(valRoot) &&
+            (docPath.includes(".val.ts") || docPath.includes(".val.js"))
+          ) {
+            // Don't await - let them validate in parallel
+            validateTextDocument(doc);
+          }
+        });
       }
     }
   }
