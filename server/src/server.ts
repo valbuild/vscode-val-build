@@ -1254,7 +1254,8 @@ connection.onCodeAction((params) => {
         const relativePath = path
           .relative(path.dirname(valModulesFile), filePath)
           .replace(/\\/g, "/")
-          .replace(/\.val\.ts$/, ".val");
+          .replace(/\.val\.ts$/, ".val")
+          .replace(/\.val\.js$/, ".val");
 
         // Parse the val.modules file to find where to insert the new module
         const sourceFile = ts.createSourceFile(
