@@ -1,6 +1,13 @@
-import { CompletionItem, CompletionItemKind } from "vscode-languageserver/node";
+import {
+  CompletionItem,
+  CompletionItemKind,
+  TextEdit,
+  Range,
+  Position,
+} from "vscode-languageserver/node";
 import { CompletionContext } from "./completionContext";
 import { ValService } from "./types";
+import ts from "typescript";
 
 /**
  * Base interface for completion providers
@@ -17,7 +24,8 @@ export interface CompletionProvider {
   provideCompletionItems(
     context: CompletionContext,
     service: ValService,
-    valRoot: string
+    valRoot: string,
+    sourceFile?: ts.SourceFile
   ): Promise<CompletionItem[]>;
 }
 
@@ -31,7 +39,8 @@ export class RouteCompletionProvider implements CompletionProvider {
   async provideCompletionItems(
     context: CompletionContext,
     service: ValService,
-    valRoot: string
+    valRoot: string,
+    sourceFile?: ts.SourceFile
   ): Promise<CompletionItem[]> {
     try {
       // We need to:
@@ -41,7 +50,7 @@ export class RouteCompletionProvider implements CompletionProvider {
       // 4. Get include/exclude patterns from the route schema
       // 5. Collect all routes from router modules
       // 6. Filter by include/exclude patterns
-      
+
       if (!context.modulePath) {
         return [];
       }
@@ -49,7 +58,7 @@ export class RouteCompletionProvider implements CompletionProvider {
       // Read the current module to get its schema
       const moduleFilePath = context.modulePath as any;
       const result = await service.read(moduleFilePath, "" as any);
-      
+
       if (!result || !result.schema) {
         return [];
       }
@@ -57,7 +66,7 @@ export class RouteCompletionProvider implements CompletionProvider {
       // For now, we'll collect all routes from all router modules
       // TODO: We should traverse the schema to find the specific field
       // and get its include/exclude patterns
-      
+
       // Get all modules
       const allModules = await service.getAllModules();
 
@@ -83,13 +92,41 @@ export class RouteCompletionProvider implements CompletionProvider {
       // TODO: Apply include/exclude patterns from the route schema
       // For now, return all routes
 
+      // Calculate the range to replace (the entire string content, excluding quotes)
+      let replaceRange: Range | undefined;
+      if (context.stringNode && sourceFile) {
+        const stringStart = context.stringNode.getStart(sourceFile);
+        const stringEnd = context.stringNode.getEnd();
+
+        // +1 to skip opening quote, -1 to skip closing quote
+        const contentStart = stringStart + 1;
+        const contentEnd = stringEnd - 1;
+
+        const startPos = sourceFile.getLineAndCharacterOfPosition(contentStart);
+        const endPos = sourceFile.getLineAndCharacterOfPosition(contentEnd);
+
+        replaceRange = Range.create(
+          Position.create(startPos.line, startPos.character),
+          Position.create(endPos.line, endPos.character)
+        );
+      }
+
       // Convert routes to completion items
-      const items: CompletionItem[] = Array.from(routes).map((route) => ({
-        label: route,
-        kind: CompletionItemKind.Value,
-        detail: "Route",
-        documentation: `Available route: ${route}`,
-      }));
+      const items: CompletionItem[] = Array.from(routes).map((route) => {
+        const item: CompletionItem = {
+          label: route,
+          kind: CompletionItemKind.Value,
+          detail: "Route",
+          documentation: `Available route: ${route}`,
+        };
+
+        // Add textEdit to replace the entire string content
+        if (replaceRange) {
+          item.textEdit = TextEdit.replace(replaceRange, route);
+        }
+
+        return item;
+      });
 
       return items;
     } catch (error) {
@@ -109,7 +146,8 @@ export class KeyOfCompletionProvider implements CompletionProvider {
   async provideCompletionItems(
     context: CompletionContext,
     service: ValService,
-    valRoot: string
+    valRoot: string,
+    sourceFile?: ts.SourceFile
   ): Promise<CompletionItem[]> {
     // TODO: Implement keyOf completion
     // This will need to:
@@ -130,7 +168,8 @@ export class ImagePathCompletionProvider implements CompletionProvider {
   async provideCompletionItems(
     context: CompletionContext,
     service: ValService,
-    valRoot: string
+    valRoot: string,
+    sourceFile?: ts.SourceFile
   ): Promise<CompletionItem[]> {
     // TODO: Implement image path completion
     // This could scan the public directory or configured asset directories
@@ -149,7 +188,8 @@ export class FilePathCompletionProvider implements CompletionProvider {
   async provideCompletionItems(
     context: CompletionContext,
     service: ValService,
-    valRoot: string
+    valRoot: string,
+    sourceFile?: ts.SourceFile
   ): Promise<CompletionItem[]> {
     // TODO: Implement file path completion
     // Similar to image path completion
@@ -186,13 +226,19 @@ export class CompletionProviderRegistry {
   async getCompletionItems(
     context: CompletionContext,
     service: ValService,
-    valRoot: string
+    valRoot: string,
+    sourceFile?: ts.SourceFile
   ): Promise<CompletionItem[]> {
     const provider = this.providers.get(context.type);
     if (!provider) {
       return [];
     }
 
-    return await provider.provideCompletionItems(context, service, valRoot);
+    return await provider.provideCompletionItems(
+      context,
+      service,
+      valRoot,
+      sourceFile
+    );
   }
 }

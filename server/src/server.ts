@@ -1214,7 +1214,8 @@ connection.onCompletion(
       const items = await completionProviderRegistry.getCompletionItems(
         context,
         service,
-        valRoot
+        valRoot,
+        sourceFile
       );
       return items;
     }

@@ -7,6 +7,7 @@ import {
 import { CompletionContext } from "./completionContext";
 import { ValService } from "./types";
 import { ValModuleResult } from "./valModules";
+import ts from "typescript";
 
 describe("completionProviders", () => {
   describe("RouteCompletionProvider", () => {
@@ -262,6 +263,104 @@ describe("completionProviders", () => {
 
       // Should return empty array on error
       assert.strictEqual(items.length, 0);
+    });
+
+    it("should provide textEdit to replace entire string when sourceFile is provided", async () => {
+      const schema = {
+        type: "record" as const,
+        router: true,
+        items: {
+          type: "object" as const,
+          items: {
+            title: { type: "string" as const },
+          },
+        },
+      };
+
+      const readResult: any = {
+        schema: {
+          type: "object" as const,
+          items: {
+            myRoute: { type: "route" as const },
+          },
+        },
+        source: {},
+        validation: {},
+        runtimeError: false,
+      };
+
+      const service: ValService = createMockService(
+        [
+          {
+            path: "/src/app/routes.val.ts",
+            schema: schema,
+            source: {
+              "/home": { title: "Home" },
+              "/about": { title: "About" },
+            },
+            validation: {},
+            runtimeError: false,
+            defaultExport: true,
+          },
+        ],
+        readResult
+      );
+
+      // Create a test source file with a string literal
+      const testCode = `
+export default c.define(
+  "/test.val.ts",
+  s.object({ myRoute: s.route() }),
+  { myRoute: "/old" }
+);`.trim();
+
+      const sourceFile = ts.createSourceFile(
+        "/test.val.ts",
+        testCode,
+        ts.ScriptTarget.Latest,
+        true
+      );
+
+      // Find the string literal "/old" in the source
+      let stringNode: ts.StringLiteral | undefined;
+      function findString(node: ts.Node) {
+        if (ts.isStringLiteral(node) && node.text === "/old") {
+          stringNode = node;
+        }
+        ts.forEachChild(node, findString);
+      }
+      findString(sourceFile);
+
+      assert.ok(stringNode, "Should find the string literal");
+
+      const provider = new RouteCompletionProvider();
+      const context: CompletionContext = {
+        type: "route",
+        position: { line: 3, character: 18 },
+        partialText: "/old",
+        modulePath: "/test.val.ts",
+        stringNode: stringNode,
+      };
+
+      const items = await provider.provideCompletionItems(
+        context,
+        service,
+        "/test/root",
+        sourceFile
+      );
+
+      // Should have routes
+      assert.ok(items.length > 0);
+
+      // Each item should have a textEdit
+      for (const item of items) {
+        assert.ok(item.textEdit, "Item should have textEdit");
+        assert.strictEqual(
+          (item.textEdit as any).newText,
+          item.label,
+          "textEdit should replace with the route label"
+        );
+      }
     });
   });
 
