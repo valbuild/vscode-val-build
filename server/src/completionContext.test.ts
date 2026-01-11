@@ -22,7 +22,7 @@ describe("completionContext", () => {
   });
 
   describe("detectCompletionContext", () => {
-    it("should detect route context in c.define content object", () => {
+    it("should detect unknown-string context in c.define content object", () => {
       const code = `export default c.define("/test.val.ts", s.object({route: s.route()}), {route: "/main"});`;
       const sourceFile = ts.createSourceFile(
         "test.val.ts",
@@ -39,7 +39,7 @@ describe("completionContext", () => {
         character: mainIndex + 3, // Inside "/main" after "/ma"
       });
 
-      assert.strictEqual(context.type, "route");
+      assert.strictEqual(context.type, "unknown-string");
       assert.strictEqual(context.modulePath, "/test.val.ts");
       assert.ok(context.partialText?.startsWith("/m"));
     });
@@ -99,24 +99,6 @@ describe("completionContext", () => {
       });
 
       assert.strictEqual(context.type, "c.file");
-    });
-
-    it("should detect keyOf context in c.keyOf first argument", () => {
-      const code = `const key = c.keyOf("someKey", c.ref("/other.val.ts"));`;
-      const sourceFile = ts.createSourceFile(
-        "test.val.ts",
-        code,
-        ts.ScriptTarget.Latest,
-        true
-      );
-
-      // Position inside the "someKey" string
-      const context = detectCompletionContext(sourceFile, {
-        line: 0,
-        character: 23,
-      });
-
-      assert.strictEqual(context.type, "keyOf");
     });
 
     it("should return none context outside of special functions", () => {

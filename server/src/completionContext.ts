@@ -4,7 +4,7 @@ import ts from "typescript";
  * Represents the context where completion was requested
  */
 export interface CompletionContext {
-  type: "none" | "route" | "keyOf" | "c.image" | "c.file";
+  type: "none" | "unknown-string" | "c.image" | "c.file";
   // The position where completion was requested
   position: {
     line: number;
@@ -14,7 +14,7 @@ export interface CompletionContext {
   stringNode?: ts.StringLiteral;
   // The current partial text being typed (if in a string)
   partialText?: string;
-  // For route type: the module path to get schema info
+  // For unknown-string: the module path to get schema info
   modulePath?: string;
 }
 
@@ -103,10 +103,13 @@ export function detectCompletionContext(
 
                 if (method.text === "define" && argIndex === 2) {
                   // Third argument of c.define (the content object)
-                  // This string could be a route value
-                  // We'll need to check the schema at runtime to know for sure
-                  // For now, mark it as potentially a route
-                  context.type = "route";
+                  // This string value could be:
+                  // - a route (if field schema is s.route())
+                  // - a keyOf (if field schema is s.keyOf())
+                  // - just a regular string
+                  // We can't determine which from AST alone, so we mark it as "unknown-string"
+                  // and let the providers check the schema at runtime
+                  context.type = "unknown-string";
 
                   // Get the module path from first argument
                   if (args[0] && ts.isStringLiteral(args[0])) {
@@ -116,8 +119,6 @@ export function detectCompletionContext(
                   context.type = "c.image";
                 } else if (method.text === "file" && argIndex === 0) {
                   context.type = "c.file";
-                } else if (method.text === "keyOf" && argIndex === 0) {
-                  context.type = "keyOf";
                 }
               }
             }

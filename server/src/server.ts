@@ -1208,18 +1208,31 @@ connection.onCompletion(
     // Detect the completion context
     const context = detectCompletionContext(sourceFile, position);
 
+    console.log("[onCompletion] Context detected:", {
+      type: context.type,
+      modulePath: context.modulePath,
+      partialText: context.partialText,
+      hasStringNode: !!context.stringNode,
+    });
+
     // Get completion items from the appropriate provider
     // The context detection already checks if it's a router schema for router completion
     if (context.type !== "none") {
+      console.log(
+        "[onCompletion] Getting completion items for type:",
+        context.type
+      );
       const items = await completionProviderRegistry.getCompletionItems(
         context,
         service,
         valRoot,
         sourceFile
       );
+      console.log("[onCompletion] Returning", items.length, "items");
       return items;
     }
 
+    console.log("[onCompletion] No completion context detected");
     return [];
   }
 );

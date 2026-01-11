@@ -25,7 +25,8 @@ export async function checkRouteIsValid(
   for (const module of allModules) {
     if (
       module.schema?.type === "record" &&
-      (module.schema as any).router &&
+      "router" in module.schema &&
+      module.schema.router &&
       module.source &&
       typeof module.source === "object" &&
       !Array.isArray(module.source)
