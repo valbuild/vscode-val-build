@@ -45,6 +45,7 @@ import {
   evaluateSingleModule,
   ValModuleResult,
 } from "./valModules";
+import { isFileInValModulesAST } from "./isFileInValModulesAST";
 
 // Simplified service interface - independent of @valbuild/server Service
 interface ValService {
@@ -629,30 +630,41 @@ function hasDefaultCDefineExport(fileContent: string): {
   }
 }
 
-// Helper function to check if a file path is in val.modules
-// Uses the actual evaluated modules to check, not string matching
-async function isFileInValModules(
-  moduleFilePath: string,
-  service: ValService
-): Promise<boolean> {
-  try {
-    // Get all module paths from the evaluated val.modules
-    const modulePaths = await service.getAllModulePaths();
-
-    // Check if this path exists in the evaluated modules
-    return modulePaths.includes(moduleFilePath);
-  } catch (error) {
-    console.error("Error checking if file is in val.modules:", error);
-    return false;
-  }
-}
-
 const textEncoder = new TextEncoder();
+
+// Track documents currently being validated to prevent cascading revalidations
+const validatingDocuments = new Set<string>();
+
 async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   const text = textDocument.getText();
   let diagnostics: Diagnostic[] = [];
   const fsPath = decodeURIComponent(uriToFsPath(textDocument.uri));
 
+  // Prevent cascading revalidations
+  if (validatingDocuments.has(fsPath)) {
+    console.log(
+      `Skipping revalidation for ${fsPath} - already being validated`
+    );
+    return;
+  }
+
+  // Mark as being validated
+  validatingDocuments.add(fsPath);
+
+  try {
+    await validateTextDocumentInternal(textDocument, text, fsPath, diagnostics);
+  } finally {
+    // Always remove from the set when done
+    validatingDocuments.delete(fsPath);
+  }
+}
+
+async function validateTextDocumentInternal(
+  textDocument: TextDocument,
+  text: string,
+  fsPath: string,
+  diagnostics: Diagnostic[]
+): Promise<void> {
   const valRoot = valRoots?.find((valRoot) => fsPath.startsWith(valRoot));
   const service = valRoot ? servicesByValRoot[valRoot] : undefined;
   const isValModule = fsPath.includes(".val.ts") || fsPath.includes(".val.js");
@@ -1068,9 +1080,12 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
         exportInfo.isValid &&
         exportInfo.valPath === expectedModulePath
       ) {
-        const isInModules = await isFileInValModules(
-          expectedModulePath,
-          service
+        // Check the AST to see if the file is already in val.modules
+        // This prevents false positives when there are runtime errors
+        const isInModules = isFileInValModulesAST(
+          fsPath,
+          valRoot,
+          valModulesFile
         );
         if (!isInModules) {
           const diagnostic: Diagnostic = {
