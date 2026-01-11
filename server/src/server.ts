@@ -11,6 +11,8 @@ import {
   TextDocumentPositionParams,
   TextDocumentSyncKind,
   InitializeResult,
+  CodeAction,
+  CodeActionKind,
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import {
@@ -31,12 +33,16 @@ import { glob } from "glob";
 import path from "path";
 import fs from "fs";
 import { stackToLine } from "./stackToLine";
-import { error } from "console";
 import { getFileExt } from "./getFileExt";
+import { SerializedRegExpPattern } from "./routeValidation";
+import { checkRouteIsValid } from "./checkRoute";
+import { findSimilar } from "./findSimilar";
+import { levenshtein } from "./levenshtein";
 import {
   findValModulesFile,
   createValModulesRuntime,
   evaluateValModulesFile,
+  evaluateSingleModule,
   ValModuleResult,
 } from "./valModules";
 
@@ -79,6 +85,8 @@ interface ValService {
         };
       }
   >;
+  getAllModulePaths: () => Promise<string[]>;
+  getAllModules: () => Promise<ValModuleResult[]>;
 }
 
 // Create a connection for the server, using Node's IPC as a transport.
@@ -101,6 +109,10 @@ let valModulesFilesByValRoot: {
 } = {};
 let runtimesByValRoot: {
   [valRoot: string]: ReturnType<typeof createValModulesRuntime>;
+} = {};
+// Store index -> path mappings for each val root for optimized validation
+let moduleIndexMappingsByValRoot: {
+  [valRoot: string]: Map<string, number>; // path -> index
 } = {};
 connection.onInitialize(async (params: InitializeParams) => {
   const capabilities = params.capabilities;
@@ -175,6 +187,9 @@ connection.onInitialize(async (params: InitializeParams) => {
       // Tell the client that this server supports code completion.
       completionProvider: {
         resolveProvider: true,
+      },
+      codeActionProvider: {
+        codeActionKinds: [CodeActionKind.QuickFix],
       },
     },
   };
@@ -361,70 +376,84 @@ async function initializeService(
 
   console.log("Created Val Service! Root: '" + valRoot + "'");
 
-  // Helper to get fresh module evaluation
-  const getModules = async (): Promise<ValModuleResult[] | null> => {
-    return await evaluateValModulesFile(runtime, valModulesFile);
+  // Initialize index mapping
+  if (!moduleIndexMappingsByValRoot[valRoot]) {
+    moduleIndexMappingsByValRoot[valRoot] = new Map();
+  }
+
+  // Helper to get all modules and build index mapping
+  const getAllModulesAndBuildIndex = async (): Promise<
+    ValModuleResult[] | null
+  > => {
+    const modules = await evaluateValModulesFile(runtime, valModulesFile);
+    if (modules) {
+      // Build index mapping: path -> index
+      const indexMapping = moduleIndexMappingsByValRoot[valRoot];
+      indexMapping.clear();
+      modules.forEach((module, index) => {
+        if (module.path) {
+          indexMapping.set(module.path, index);
+        }
+      });
+    }
+    return modules;
+  };
+
+  // Helper to get a single module by path using index
+  const getSingleModuleByPath = async (
+    path: string
+  ): Promise<{ module: ValModuleResult; fromIndex: boolean } | null> => {
+    const indexMapping = moduleIndexMappingsByValRoot[valRoot];
+    const index = indexMapping.get(path);
+
+    if (index !== undefined) {
+      // Try to evaluate by index
+      const module = await evaluateSingleModule(runtime, valModulesFile, index);
+
+      if (module && module.path === path) {
+        // Index is still valid
+        return { module, fromIndex: true };
+      }
+
+      // Index is invalid, need to rebuild
+      console.log(`Index mapping invalid for ${path}, rebuilding...`);
+    }
+
+    // Fall back to full evaluation
+    const modules = await getAllModulesAndBuildIndex();
+    if (!modules) {
+      return null;
+    }
+
+    const foundModule = modules.find((m) => m.path === path);
+    return foundModule ? { module: foundModule, fromIndex: false } : null;
   };
 
   // Return service interface
   return {
+    getAllModulePaths: async () => {
+      const modules = await getAllModulesAndBuildIndex();
+      if (!modules) {
+        return [];
+      }
+      return modules
+        .filter((m) => m.path !== undefined)
+        .map((m) => m.path as string);
+    },
+    getAllModules: async () => {
+      const modules = await getAllModulesAndBuildIndex();
+      return modules || [];
+    },
     read: async (moduleFilePath, modulePath, options) => {
       try {
-        // Evaluate modules (will use runtime cache for unchanged files)
-        const modules = await getModules();
-
-        if (!modules) {
-          return {
-            path: (moduleFilePath + modulePath) as SourcePath,
-            errors: {
-              fatal: [
-                {
-                  message: "Failed to evaluate val.modules file",
-                },
-              ],
-            },
-          };
-        }
-
-        // Filter out modules that failed to load (have undefined paths)
-        const validModules = modules.filter((m) => m.path !== undefined);
-        const failedModules = modules.filter((m) => m.path === undefined);
-
         // Find the matching module
         const normalizedModuleFilePath = moduleFilePath.startsWith("/")
           ? moduleFilePath
           : "/" + moduleFilePath;
 
-        const matchingModule = validModules.find(
-          (m) => m.path === normalizedModuleFilePath
-        );
+        const result = await getSingleModuleByPath(normalizedModuleFilePath);
 
-        if (!matchingModule) {
-          // Check if this module is one of the failed modules
-          const isFailedModule = failedModules.some(
-            (m) =>
-              m.message &&
-              (m.message.includes("Maximum call stack") ||
-                m.message.includes("circular dependency"))
-          );
-
-          if (isFailedModule || failedModules.length > 0) {
-            return {
-              path: (moduleFilePath + modulePath) as SourcePath,
-              errors: {
-                fatal: [
-                  {
-                    message: `Module failed to load. This is likely due to a circular dependency in your modules. ${
-                      failedModules.length
-                    } module(s) failed: ${failedModules
-                      .map((m) => m.message || "unknown")
-                      .join(", ")}`,
-                  },
-                ],
-              },
-            };
-          }
-
+        if (!result) {
           return {
             path: (moduleFilePath + modulePath) as SourcePath,
             errors: {
@@ -432,6 +461,8 @@ async function initializeService(
             },
           };
         }
+
+        const matchingModule = result.module;
 
         // Check for runtime errors
         if (matchingModule.runtimeError) {
@@ -525,6 +556,97 @@ function findConfigFile(startPath: string): string | null {
   return null;
 }
 
+// Helper function to check if a file exports default c.define()
+// Returns the position of the export statement if found
+function hasDefaultCDefineExport(fileContent: string): {
+  found: boolean;
+  line?: number;
+  character?: number;
+  endLine?: number;
+  endCharacter?: number;
+  valPath?: string;
+  isValid?: boolean;
+} {
+  try {
+    const sourceFile = ts.createSourceFile(
+      "temp.ts",
+      fileContent,
+      ts.ScriptTarget.Latest,
+      true
+    );
+
+    for (const statement of sourceFile.statements) {
+      if (ts.isExportAssignment(statement) && !statement.isExportEquals) {
+        const expression = statement.expression;
+        if (
+          ts.isCallExpression(expression) &&
+          ts.isPropertyAccessExpression(expression.expression)
+        ) {
+          const obj = expression.expression.expression;
+          const method = expression.expression.name;
+          if (
+            ts.isIdentifier(obj) &&
+            obj.text === "c" &&
+            ts.isIdentifier(method) &&
+            method.text === "define"
+          ) {
+            // Check that c.define has exactly 3 arguments
+            if (expression.arguments.length !== 3) {
+              return { found: false, isValid: false };
+            }
+
+            // Check that the first argument is a string literal
+            const firstArg = expression.arguments[0];
+            if (!ts.isStringLiteral(firstArg)) {
+              return { found: false, isValid: false };
+            }
+
+            const valPath = firstArg.text;
+
+            // Get the position of the export statement
+            const start = sourceFile.getLineAndCharacterOfPosition(
+              statement.getStart(sourceFile)
+            );
+            const end = sourceFile.getLineAndCharacterOfPosition(
+              statement.getEnd()
+            );
+            return {
+              found: true,
+              line: start.line,
+              character: start.character,
+              endLine: end.line,
+              endCharacter: end.character,
+              valPath: valPath,
+              isValid: true,
+            };
+          }
+        }
+      }
+    }
+    return { found: false };
+  } catch {
+    return { found: false };
+  }
+}
+
+// Helper function to check if a file path is in val.modules
+// Uses the actual evaluated modules to check, not string matching
+async function isFileInValModules(
+  moduleFilePath: string,
+  service: ValService
+): Promise<boolean> {
+  try {
+    // Get all module paths from the evaluated val.modules
+    const modulePaths = await service.getAllModulePaths();
+
+    // Check if this path exists in the evaluated modules
+    return modulePaths.includes(moduleFilePath);
+  } catch (error) {
+    console.error("Error checking if file is in val.modules:", error);
+    return false;
+  }
+}
+
 const textEncoder = new TextEncoder();
 async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   const text = textDocument.getText();
@@ -556,6 +678,35 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
         const valModulesDir = path.dirname(valModulesFile);
         const systemFile = path.join(valModulesDir, "<system>.ts");
         runtimesByValRoot[valRoot].invalidateFile(systemFile);
+
+        // Invalidate all system files for index-based validation
+        for (let i = 0; i < 100; i++) {
+          const indexSystemFile = path.join(valModulesDir, `<system-${i}>.ts`);
+          runtimesByValRoot[valRoot].invalidateFile(indexSystemFile);
+        }
+      }
+
+      // If val.modules file itself changed, clear the index mapping
+      if (fsPath.includes("val.modules")) {
+        console.log(
+          `val.modules changed, clearing index mapping for: ${valRoot}`
+        );
+        if (moduleIndexMappingsByValRoot[valRoot]) {
+          moduleIndexMappingsByValRoot[valRoot].clear();
+        }
+
+        // Revalidate all open .val.ts files since they might now be included/excluded
+        console.log(`Revalidating all open .val.ts files for: ${valRoot}`);
+        documents.all().forEach((doc) => {
+          const docPath = decodeURIComponent(uriToFsPath(doc.uri));
+          if (
+            docPath.startsWith(valRoot) &&
+            (docPath.includes(".val.ts") || docPath.includes(".val.js"))
+          ) {
+            // Don't await - let them validate in parallel
+            validateTextDocument(doc);
+          }
+        });
       }
     }
   }
@@ -677,6 +828,9 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                 const keyOfFix = error.fixes?.find(
                   (fix) => fix === "keyof:check-keys"
                 );
+                const routerFix = error.fixes?.find(
+                  (fix) => fix === "router:check-route"
+                );
                 const uploadRemoteFileFix = error.fixes?.find(
                   (fix) =>
                     fix === "file:upload-remote" ||
@@ -722,6 +876,81 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                       "Expected error.value to be an object with key property and sourcePath property"
                     );
                     // NOTE: this ignores error
+                  }
+                } else if (source && schema && routerFix) {
+                  // Validate route existence and patterns
+                  console.log(
+                    "[DEBUG router:check-route] error.value:",
+                    error.value,
+                    "type:",
+                    typeof error.value
+                  );
+
+                  // Extract route and patterns from error.value
+                  let route: string;
+                  let include: SerializedRegExpPattern | undefined;
+                  let exclude: SerializedRegExpPattern | undefined;
+
+                  if (typeof error.value === "string") {
+                    // Old format: just a string
+                    route = error.value;
+                    // Extract router configuration from schema
+                    const routerConfig = (schema as any).router;
+                    include = routerConfig?.include as
+                      | SerializedRegExpPattern
+                      | undefined;
+                    exclude = routerConfig?.exclude as
+                      | SerializedRegExpPattern
+                      | undefined;
+                  } else if (
+                    typeof error.value === "object" &&
+                    error.value &&
+                    "route" in error.value &&
+                    typeof error.value.route === "string"
+                  ) {
+                    // New format: object with route, include, exclude
+                    route = error.value.route;
+                    include = error.value.include as
+                      | SerializedRegExpPattern
+                      | undefined;
+                    exclude = error.value.exclude as
+                      | SerializedRegExpPattern
+                      | undefined;
+                  } else {
+                    console.error(
+                      "[ERROR router:check-route] Expected error.value to be a string or object with route property, but got:",
+                      typeof error.value,
+                      error.value
+                    );
+                    // NOTE: this ignores error - same as keyof:check-keys handling
+                    continue;
+                  }
+
+                  console.log(
+                    "[DEBUG router:check-route] Validating route:",
+                    route,
+                    "include:",
+                    include,
+                    "exclude:",
+                    exclude
+                  );
+
+                  // Validate route existence and patterns
+                  const validationResult = await checkRouteIsValid(
+                    route,
+                    include,
+                    exclude,
+                    service
+                  );
+
+                  console.log(
+                    "[DEBUG router:check-route] Validation result:",
+                    validationResult
+                  );
+
+                  if (validationResult.error) {
+                    diagnostic.message = validationResult.message;
+                    diagnostics.push(diagnostic);
                   }
                 } else if (source && schema && addMetadataFix) {
                   diagnostic.code = addMetadataFix;
@@ -809,38 +1038,52 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
     }
   }
 
-  // Send the computed diagnostics to VSCode.
-  connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
-}
-
-// GPT generated levenshtein distance algorithm:
-const levenshtein = (a: string, b: string): number => {
-  const [m, n] = [a.length, b.length];
-  if (!m || !n) return Math.max(m, n);
-
-  const dp = Array.from({ length: m + 1 }, (_, i) => i);
-
-  for (let j = 1; j <= n; j++) {
-    let prev = dp[0];
-    dp[0] = j;
-
-    for (let i = 1; i <= m; i++) {
-      const temp = dp[i];
-      dp[i] =
-        a[i - 1] === b[j - 1]
-          ? prev
-          : Math.min(prev + 1, dp[i - 1] + 1, dp[i] + 1);
-      prev = temp;
+  // Check if this is a .val.ts file with c.define export that's not in val.modules
+  if (isValModule && valRoot && text && service) {
+    const valModulesFile = valModulesFilesByValRoot[valRoot];
+    if (valModulesFile) {
+      const exportInfo = hasDefaultCDefineExport(text);
+      const expectedModulePath = fsPath.replace(valRoot, "");
+      if (
+        exportInfo.found &&
+        exportInfo.isValid &&
+        exportInfo.valPath === expectedModulePath
+      ) {
+        const isInModules = await isFileInValModules(
+          expectedModulePath,
+          service
+        );
+        if (!isInModules) {
+          const diagnostic: Diagnostic = {
+            severity: DiagnosticSeverity.Warning,
+            range: {
+              start: {
+                line: exportInfo.line || 0,
+                character: exportInfo.character || 0,
+              },
+              end: {
+                line: exportInfo.endLine || exportInfo.line || 0,
+                character: exportInfo.endCharacter || Number.MAX_VALUE,
+              },
+            },
+            message:
+              "This Val module is not registered in val.modules. Add it to val.modules to use it.",
+            source: "val",
+            code: "val:missing-module",
+            data: {
+              filePath: fsPath,
+              valRoot: valRoot,
+              valModulesFile: valModulesFile,
+            },
+          };
+          diagnostics.push(diagnostic);
+        }
+      }
     }
   }
 
-  return dp[m];
-};
-
-function findSimilar(key: string, targets: string[]) {
-  return targets
-    .map((target) => ({ target, distance: levenshtein(key, target) }))
-    .sort((a, b) => a.distance - b.distance);
+  // Send the computed diagnostics to VSCode.
+  connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
 }
 
 function checkKeyOf(
@@ -957,6 +1200,126 @@ connection.onCompletionResolve((item: CompletionItem): CompletionItem => {
     item.documentation = "JavaScript documentation";
   }
   return item;
+});
+
+// Code action handler for automatic fixes
+connection.onCodeAction((params) => {
+  const diagnostics = params.context.diagnostics;
+  const codeActions: CodeAction[] = [];
+
+  for (const diagnostic of diagnostics) {
+    if (diagnostic.code === "val:missing-module" && diagnostic.data) {
+      const { filePath, valRoot, valModulesFile } = diagnostic.data as {
+        filePath: string;
+        valRoot: string;
+        valModulesFile: string;
+      };
+
+      try {
+        const valModulesContent = fs.readFileSync(valModulesFile, "utf-8");
+        const relativePath = path
+          .relative(path.dirname(valModulesFile), filePath)
+          .replace(/\\/g, "/")
+          .replace(/\.val\.ts$/, ".val");
+
+        // Parse the val.modules file to find where to insert the new module
+        const sourceFile = ts.createSourceFile(
+          valModulesFile,
+          valModulesContent,
+          ts.ScriptTarget.Latest,
+          true
+        );
+
+        let insertPosition: { line: number; character: number } | null = null;
+        let modulesArrayNode: ts.ArrayLiteralExpression | null = null;
+        let indentation = "    "; // Default indentation
+
+        // Find the modules array in the config.modules([...])
+        ts.forEachChild(sourceFile, function visit(node) {
+          if (ts.isCallExpression(node)) {
+            if (
+              ts.isPropertyAccessExpression(node.expression) &&
+              node.expression.name.text === "modules" &&
+              node.arguments.length > 0
+            ) {
+              const firstArg = node.arguments[0];
+              if (ts.isArrayLiteralExpression(firstArg)) {
+                modulesArrayNode = firstArg;
+                // Find the last element in the array
+                if (firstArg.elements.length > 0) {
+                  const lastElement =
+                    firstArg.elements[firstArg.elements.length - 1];
+                  const pos = sourceFile.getLineAndCharacterOfPosition(
+                    lastElement.end
+                  );
+                  insertPosition = pos;
+
+                  // Detect indentation from the first element
+                  const firstElement = firstArg.elements[0];
+                  const firstElementPos =
+                    sourceFile.getLineAndCharacterOfPosition(
+                      firstElement.getStart(sourceFile)
+                    );
+                  indentation = " ".repeat(firstElementPos.character);
+                } else {
+                  // Empty array - insert at array start
+                  const arrayStart = sourceFile.getLineAndCharacterOfPosition(
+                    firstArg.getStart(sourceFile) + 1 // After the '['
+                  );
+                  insertPosition = arrayStart;
+                }
+              }
+            }
+          }
+          ts.forEachChild(node, visit);
+        });
+
+        if (insertPosition !== null && modulesArrayNode !== null) {
+          // Generate the import statement
+          const importStatement = `import("./${relativePath}")`;
+
+          // Determine if we need a comma before or after
+          const arrayNode = modulesArrayNode as ts.ArrayLiteralExpression;
+          const hasElements = arrayNode.elements.length > 0;
+          const newText = hasElements
+            ? `,\n${indentation}${importStatement}`
+            : `\n${indentation}${importStatement}\n${indentation.slice(2)}`;
+
+          // Create a workspace edit to add the module
+          const textDocumentUri = `file://${valModulesFile}`;
+          const edit = {
+            changes: {
+              [textDocumentUri]: [
+                {
+                  range: {
+                    start: insertPosition,
+                    end: insertPosition,
+                  },
+                  newText: newText,
+                },
+              ],
+            },
+          };
+
+          const action: CodeAction = {
+            title: "Add module to val.modules",
+            kind: CodeActionKind.QuickFix,
+            diagnostics: [diagnostic],
+            edit: edit,
+          };
+
+          codeActions.push(action);
+        }
+      } catch (error) {
+        console.error(
+          "Failed to create code action for missing module:",
+          error
+        );
+      }
+    }
+  }
+
+  return codeActions;
 });
 
 // Make the text document manager listen on the connection

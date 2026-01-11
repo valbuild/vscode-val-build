@@ -212,6 +212,103 @@ export function createValModulesRuntime(
 }
 
 /**
+ * Generate code that processes a single module by index
+ */
+function generateSingleModuleProcessorCode(index: number): string {
+  return `
+import * as modules from "./val.modules";
+import { Internal } from "@valbuild/core";
+
+const targetModule = modules.default?.modules[${index}];
+if (!targetModule) {
+  throw new Error("Module at index ${index} does not exist");
+}
+
+export default targetModule.def().then(importedModule => {
+  const valModule = importedModule.default;
+  if (!valModule) {
+    return {
+      path: undefined,
+      schema: undefined,
+      source: undefined,
+      validation: {
+        ["/"]: [{
+          message: "Module has no default export"
+        }]
+      },
+      runtimeError: true,
+      defaultExport: false,
+    };
+  }
+  
+  const path = Internal.getValPath(valModule);
+  
+  let schema;
+  let runtimeError = false;
+  try {
+    schema = Internal.getSchema(valModule)['executeSerialize']();
+  } catch (error) {
+    console.error("Error getting schema for module at path:", path, error);
+    schema = undefined;
+  }
+  let source;
+  try {
+    source = Internal.getSource(valModule);
+  } catch (error) {
+    console.error("Error getting source for module at path:", path, error);
+    source = undefined;
+  }
+  let validation;
+  try {
+    if (source && schema) {
+      validation = Internal.validate(valModule, path || "/", source);
+    } else {
+      validation = {
+        [path || "/"]: [
+          {
+            message: "Could not validate module: " + (!source && !schema ? "source and schema are undefined" : !source ? "source is undefined" : "schema is undefined")
+          }
+        ]
+      }
+    }
+  } catch (error) {
+    console.error("Error validating module at path:", path, error);
+    validation = {
+      [path || "/"]: [
+        {
+          message: error.message,
+        }
+      ]
+    };
+  }
+  return {
+    path: path,
+    schema,
+    source,
+    validation,
+    runtimeError,
+    defaultExport: !!importedModule.default,
+  };
+}).catch(error => {
+  console.error("Failed to load module #${index}:", error.message);
+  return {
+    path: undefined,
+    runtimeError: true,
+    defaultExport: false,
+    message: error.message,
+    validation: {
+      ["/"]: [
+        {
+          message: "Failed to load module: " + error.message,
+        }
+      ]
+    },
+  };
+});
+`;
+}
+
+/**
  * Evaluate a val.modules file using a provided runtime
  * @param runtime - The runtime instance to use for evaluation
  * @param valModulesFilePath - Path to the val.modules file
@@ -239,6 +336,42 @@ export async function evaluateValModulesFile(
   } catch (err) {
     console.error(
       `Error evaluating val.modules file: ${valModulesFilePath}`,
+      err
+    );
+    return null;
+  }
+}
+
+/**
+ * Evaluate a single module by index from val.modules file
+ * @param runtime - The runtime instance to use for evaluation
+ * @param valModulesFilePath - Path to the val.modules file
+ * @param index - Index of the module to evaluate
+ * @returns Processed module information or null if failed
+ */
+export async function evaluateSingleModule(
+  runtime: ReturnType<typeof createTsVmRuntime>,
+  valModulesFilePath: string,
+  index: number
+): Promise<ValModuleResult | null> {
+  try {
+    // Get the directory containing val.modules file
+    const valModulesDir = path.dirname(valModulesFilePath);
+
+    // Generate and run the single module processor code
+    const moduleCode = generateSingleModuleProcessorCode(index);
+    const result = await runtime.run(
+      moduleCode,
+      path.join(valModulesDir, `<system-${index}>.ts`)
+    );
+
+    // The module exports a Promise as default, so await it
+    const processedModule = await result.default;
+
+    return processedModule;
+  } catch (err) {
+    console.error(
+      `Error evaluating module at index ${index} from ${valModulesFilePath}`,
       err
     );
     return null;

@@ -16,6 +16,7 @@ import { uploadRemoteFileCommand } from "./commands/uploadRemoteFile";
 import { loginCommand } from "./commands/loginCommand";
 import { getAddMetadataFix } from "./getAddMetadataFix";
 import { downloadRemoteFileCommand } from "./commands/downloadRemoteFile";
+import { addModuleToValModulesCommand } from "./commands/addModuleToValModules";
 
 let client: LanguageClient;
 let statusBarItem: vscode.StatusBarItem;
@@ -52,7 +53,11 @@ export function activate(context: ExtensionContext) {
       "val.downloadRemoteFile",
       downloadRemoteFileCommand
     ),
-    vscode.commands.registerCommand("val.login", loginCommand(statusBarItem))
+    vscode.commands.registerCommand("val.login", loginCommand(statusBarItem)),
+    vscode.commands.registerCommand(
+      "val.addModuleToValModules",
+      addModuleToValModulesCommand
+    )
   );
   updateStatusBar(statusBarItem, currentProjectDir);
 
@@ -212,6 +217,17 @@ export class ValActionProvider implements vscode.CodeActionProvider {
               code: diag.code,
             },
           ],
+        };
+        actions.push(fix);
+      } else if (diag.code === "val:missing-module") {
+        const fix = new vscode.CodeAction(
+          "Add module to val.modules",
+          vscode.CodeActionKind.QuickFix
+        );
+        fix.command = {
+          title: "Add module to val.modules",
+          command: "val.addModuleToValModules",
+          arguments: [(diag as any).data],
         };
         actions.push(fix);
       }
