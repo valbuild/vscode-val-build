@@ -749,8 +749,44 @@ async function validateTextDocumentInternal(
           const firstArg = node.arguments[0];
           if (firstArg && ts.isStringLiteral(firstArg)) {
             const pathValue = firstArg.text;
-            // Check if path is exactly "/public/val/" or ends with trailing slash (directory path)
+
+            // Skip validation for empty strings (user is still typing)
+            if (pathValue === "") {
+              return;
+            }
+
+            // Check if path is not under /public/val/ (but starts with /public/)
+            // Allow /public/val without trailing slash to be handled by Val core
             if (
+              pathValue.startsWith("/public/") &&
+              !pathValue.startsWith("/public/val/") &&
+              pathValue !== "/public/val"
+            ) {
+              const start = sourceFile.getLineAndCharacterOfPosition(
+                firstArg.getStart()
+              );
+              const end = sourceFile.getLineAndCharacterOfPosition(
+                firstArg.getEnd()
+              );
+
+              const diagnostic: Diagnostic = {
+                severity: DiagnosticSeverity.Error,
+                range: {
+                  start: { line: start.line, character: start.character },
+                  end: { line: end.line, character: end.character },
+                },
+                code: "invalid-path-location",
+                message: `Path "${pathValue}" is not under /public/val/. All ${
+                  method.text === "image" ? "images" : "files"
+                } must be located in the /public/val/ directory (e.g., "/public/val/${pathValue
+                  .split("/")
+                  .pop()}")`,
+                source: "val",
+              };
+              diagnostics.push(diagnostic);
+            }
+            // Check if path is exactly "/public/val/" or ends with trailing slash (directory path)
+            else if (
               pathValue === "/public/val/" ||
               (pathValue.startsWith("/public/val/") && pathValue.endsWith("/"))
             ) {
@@ -767,7 +803,7 @@ async function validateTextDocumentInternal(
                   start: { line: start.line, character: start.character },
                   end: { line: end.line, character: end.character },
                 },
-                code: "invalid-path",
+                code: "invalid-path-directory",
                 message: `Path "${pathValue}" is a directory path. You must provide a path to a specific file (e.g., "/public/val/image.png")`,
                 source: "val",
               };

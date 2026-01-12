@@ -29,8 +29,44 @@ describe("Invalid Path Validation", () => {
           const firstArg = node.arguments[0];
           if (firstArg && ts.isStringLiteral(firstArg)) {
             const pathValue = firstArg.text;
-            // Check if path is exactly "/public/val/" or ends with trailing slash (directory path)
+
+            // Skip validation for empty strings (user is still typing)
+            if (pathValue === "") {
+              return;
+            }
+
+            // Check if path is not under /public/val/ (but starts with /public/)
+            // Allow /public/val without trailing slash to be handled by Val core
             if (
+              pathValue.startsWith("/public/") &&
+              !pathValue.startsWith("/public/val/") &&
+              pathValue !== "/public/val"
+            ) {
+              const start = sourceFile.getLineAndCharacterOfPosition(
+                firstArg.getStart()
+              );
+              const end = sourceFile.getLineAndCharacterOfPosition(
+                firstArg.getEnd()
+              );
+
+              const diagnostic: Diagnostic = {
+                severity: DiagnosticSeverity.Error,
+                range: {
+                  start: { line: start.line, character: start.character },
+                  end: { line: end.line, character: end.character },
+                },
+                code: "invalid-path-location",
+                message: `Path "${pathValue}" is not under /public/val/. All ${
+                  method.text === "image" ? "images" : "files"
+                } must be located in the /public/val/ directory (e.g., "/public/val/${pathValue
+                  .split("/")
+                  .pop()}")`,
+                source: "val",
+              };
+              diagnostics.push(diagnostic);
+            }
+            // Check if path is exactly "/public/val/" or ends with trailing slash (directory path)
+            else if (
               pathValue === "/public/val/" ||
               (pathValue.startsWith("/public/val/") && pathValue.endsWith("/"))
             ) {
@@ -47,7 +83,7 @@ describe("Invalid Path Validation", () => {
                   start: { line: start.line, character: start.character },
                   end: { line: end.line, character: end.character },
                 },
-                code: "invalid-path",
+                code: "invalid-path-directory",
                 message: `Path "${pathValue}" is a directory path. You must provide a path to a specific file (e.g., "/public/val/image.png")`,
                 source: "val",
               };
@@ -64,6 +100,58 @@ describe("Invalid Path Validation", () => {
     return diagnostics;
   }
 
+  it("should report error for c.image with path not under /public/val/", () => {
+    const code = `
+import { c, s } from "@valbuild/core";
+export default c.define("/test.val.ts", s.image(), c.image("/public/foo.png"));
+    `;
+
+    const diagnostics = validatePaths(code);
+
+    assert.strictEqual(
+      diagnostics.length,
+      1,
+      "Should have one diagnostic for path not under /public/val/"
+    );
+    assert.strictEqual(diagnostics[0].code, "invalid-path-location");
+    assert.ok(
+      diagnostics[0].message.includes('"/public/foo.png"'),
+      "Message should mention the path"
+    );
+    assert.ok(
+      diagnostics[0].message.includes("not under /public/val/"),
+      "Message should say it's not under /public/val/"
+    );
+    assert.ok(
+      diagnostics[0].message.includes("/public/val/foo.png"),
+      "Message should suggest the correct path"
+    );
+  });
+
+  it("should report error for c.file with path in /public/subdirectory/", () => {
+    const code = `
+import { c, s } from "@valbuild/core";
+export default c.define("/test.val.ts", s.file(), c.file("/public/documents/report.pdf"));
+    `;
+
+    const diagnostics = validatePaths(code);
+
+    assert.strictEqual(
+      diagnostics.length,
+      1,
+      "Should have one diagnostic for path not under /public/val/"
+    );
+    assert.strictEqual(diagnostics[0].code, "invalid-path-location");
+    assert.ok(
+      diagnostics[0].message.includes("/public/documents/report.pdf"),
+      "Message should mention the path"
+    );
+    assert.ok(
+      diagnostics[0].message.includes("/public/val/report.pdf"),
+      "Message should suggest moving to /public/val/"
+    );
+  });
+
   it("should report error for c.image with /public/val/ (directory path)", () => {
     const code = `
 import { c, s } from "@valbuild/core";
@@ -77,7 +165,7 @@ export default c.define("/test.val.ts", s.image(), c.image("/public/val/"));
       1,
       "Should have one diagnostic for directory path"
     );
-    assert.strictEqual(diagnostics[0].code, "invalid-path");
+    assert.strictEqual(diagnostics[0].code, "invalid-path-directory");
     assert.ok(
       diagnostics[0].message.includes('"/public/val/"'),
       "Message should mention the path"
@@ -101,7 +189,7 @@ export default c.define("/test.val.ts", s.file(), c.file("/public/val/"));
       1,
       "Should have one diagnostic for directory path"
     );
-    assert.strictEqual(diagnostics[0].code, "invalid-path");
+    assert.strictEqual(diagnostics[0].code, "invalid-path-directory");
   });
 
   it("should report error for paths ending with trailing slash", () => {
