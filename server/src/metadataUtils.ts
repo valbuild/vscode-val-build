@@ -13,6 +13,16 @@ export interface FileMetadata {
 }
 
 /**
+ * Normalize MIME type to use standard formats
+ * @param mimeType The MIME type to normalize
+ * @returns Normalized MIME type
+ */
+function normalizeMimeType(mimeType: string): string {
+  // Normalize image/jpg to image/jpeg (standard format)
+  return mimeType === "image/jpg" ? "image/jpeg" : mimeType;
+}
+
+/**
  * Extract metadata from an image file
  * @param absoluteFilePath Absolute path to the image file
  * @returns Object containing width, height, and mimeType
@@ -33,7 +43,7 @@ export function getImageMetadata(
       return {
         width: dimensions.width,
         height: dimensions.height,
-        mimeType,
+        mimeType: normalizeMimeType(mimeType),
       };
     }
 
@@ -41,7 +51,7 @@ export function getImageMetadata(
     const mimeType = filenameToMimeType(absoluteFilePath);
     if (mimeType && mimeType.startsWith("image/")) {
       return {
-        mimeType,
+        mimeType: normalizeMimeType(mimeType),
       };
     }
 
@@ -68,7 +78,7 @@ export function getFileMetadata(absoluteFilePath: string): FileMetadata | null {
     const mimeType = filenameToMimeType(absoluteFilePath);
     if (mimeType) {
       return {
-        mimeType,
+        mimeType: normalizeMimeType(mimeType),
       };
     }
 

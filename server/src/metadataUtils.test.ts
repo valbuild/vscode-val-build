@@ -7,6 +7,34 @@ describe("metadataUtils", () => {
   const fixtureRoot = path.join(__dirname, "../__fixtures__/public-val-files");
 
   describe("getImageMetadata", () => {
+    it("should normalize image/jpg to image/jpeg", () => {
+      const imagePath = path.join(fixtureRoot, "public/val/banner.jpg");
+      
+      // Ensure directory exists
+      const dir = path.dirname(imagePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      
+      // Create a valid 1x1 JPEG if it doesn't exist
+      if (!fs.existsSync(imagePath)) {
+        // Valid 1x1 JPEG (631 bytes)
+        const jpegBuffer = Buffer.from(
+          "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDAREAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCwAA8A/9k=",
+          "base64"
+        );
+        fs.writeFileSync(imagePath, jpegBuffer);
+      }
+
+      const metadata = getImageMetadata(imagePath);
+
+      // Should normalize image/jpg to image/jpeg
+      if (metadata) {
+        assert.strictEqual(metadata.mimeType, "image/jpeg", "MIME type should be normalized to image/jpeg");
+        assert.notStrictEqual(metadata.mimeType, "image/jpg", "MIME type should not be image/jpg");
+      }
+    });
+
     it("should extract metadata from PNG image", () => {
       const imagePath = path.join(fixtureRoot, "public/val/logo.png");
       

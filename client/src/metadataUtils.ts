@@ -5,6 +5,16 @@ import sizeOf from "image-size";
 import * as ts from "typescript";
 import { filenameToMimeType } from "./mimeType/convertMimeType";
 
+/**
+ * Normalize MIME type to use standard formats
+ * @param mimeType The MIME type to normalize
+ * @returns Normalized MIME type
+ */
+function normalizeMimeType(mimeType: string): string {
+  // Normalize image/jpg to image/jpeg (standard format)
+  return mimeType === "image/jpg" ? "image/jpeg" : mimeType;
+}
+
 export function getImageMetadata(imageFilename: string, document: vscode.Uri) {
   const resolvedFile = getAbsoluteFilePath(imageFilename, document);
   if (resolvedFile.status === "ok") {
@@ -18,7 +28,7 @@ export function getImageMetadata(imageFilename: string, document: vscode.Uri) {
         return {
           width: res.width,
           height: res.height,
-          mimeType,
+          mimeType: normalizeMimeType(mimeType),
         };
       }
     }
@@ -33,7 +43,7 @@ export function getFileMetadata(filename: string, document: vscode.Uri) {
     const mimeType = filenameToMimeType(filename);
     if (mimeType) {
       return {
-        mimeType,
+        mimeType: normalizeMimeType(mimeType),
       };
     }
   }
