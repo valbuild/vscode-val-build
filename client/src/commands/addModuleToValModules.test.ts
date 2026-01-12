@@ -1,4 +1,8 @@
 import { describe, it, expect } from "@jest/globals";
+
+// Mock vscode module
+jest.mock("vscode", () => ({}), { virtual: true });
+
 import {
   calculateRelativePath,
   findInsertionPoint,

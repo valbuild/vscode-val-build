@@ -889,13 +889,15 @@ async function validateTextDocumentInternal(
                     // Old format: just a string
                     route = error.value;
                     // Extract router configuration from schema
-                    const routerConfig = (schema as any).router;
-                    include = routerConfig?.include as
-                      | SerializedRegExpPattern
-                      | undefined;
-                    exclude = routerConfig?.exclude as
-                      | SerializedRegExpPattern
-                      | undefined;
+                    if ("router" in schema && schema.router) {
+                      const routerConfig = schema.router as any;
+                      include = routerConfig.include as
+                        | SerializedRegExpPattern
+                        | undefined;
+                      exclude = routerConfig.exclude as
+                        | SerializedRegExpPattern
+                        | undefined;
+                    }
                   } else if (
                     typeof error.value === "object" &&
                     error.value &&

@@ -158,7 +158,7 @@ export default c.define(
         [
           {
             path: "/src/content.val.ts",
-            schema: { type: "string" },
+            schema: { type: "string" } as any,
             source: "Hello World",
             validation: {},
             runtimeError: false,
@@ -383,7 +383,7 @@ export default c.define(
     });
 
     it("should provide textEdit to replace entire string when sourceFile is provided", async () => {
-      const schema = {
+      const schema: any = {
         type: "record" as const,
         router: true,
         items: {
@@ -481,7 +481,7 @@ export default c.define(
     });
 
     it("should filter routes by include pattern", async () => {
-      const schema = {
+      const schema: any = {
         type: "record" as const,
         router: true,
         items: {
@@ -576,7 +576,7 @@ export default c.define(
     });
 
     it("should filter routes by exclude pattern", async () => {
-      const schema = {
+      const schema: any = {
         type: "record" as const,
         router: true,
         items: {
@@ -671,7 +671,7 @@ export default c.define(
     });
 
     it("should filter routes by both include and exclude patterns", async () => {
-      const schema = {
+      const schema: any = {
         type: "record" as const,
         router: true,
         items: {
@@ -767,7 +767,7 @@ export default c.define(
     });
 
     it("should find route fields nested in union types", async () => {
-      const schema = {
+      const schema: any = {
         type: "record" as const,
         router: true,
         items: {
@@ -915,7 +915,7 @@ export default c.define(
     });
 
     it("should handle deeply nested routes in union within array within object", async () => {
-      const schema = {
+      const schema: any = {
         type: "record" as const,
         router: true,
         items: {
@@ -1097,7 +1097,7 @@ export default c.define(
       service.read = async (moduleFilePath: any, modulePath: any) => {
         if (moduleFilePath === "/authors.val.ts#/") {
           return {
-            schema: recordSchema as any,
+            schema: recordSchema,
             source: {
               user1: { name: "Alice" },
               user2: { name: "Bob" },

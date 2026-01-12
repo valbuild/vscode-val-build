@@ -2,13 +2,14 @@ import fs from "fs";
 import path from "path";
 import ts from "typescript";
 import { createTsVmRuntime } from "./tsRuntime";
+import { SerializedSchema } from "@valbuild/core";
 
 /**
  * Result structure for a processed Val module
  */
 export interface ValModuleResult {
   path: string;
-  schema?: any;
+  schema?: SerializedSchema | undefined;
   source?: any;
   validation?: any;
   runtimeError: boolean;
