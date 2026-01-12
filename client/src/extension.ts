@@ -24,7 +24,9 @@ let currentProjectDir: string;
 
 export function activate(context: ExtensionContext) {
   const currentEditor = vscode.window.activeTextEditor;
-  currentProjectDir = getProjectRootDir(currentEditor.document.uri);
+  if (currentEditor) {
+    currentProjectDir = getProjectRootDir(currentEditor.document.uri);
+  }
   statusBarItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
     100
@@ -62,10 +64,11 @@ export function activate(context: ExtensionContext) {
   updateStatusBar(statusBarItem, currentProjectDir);
 
   vscode.window.onDidChangeActiveTextEditor(
-    () => {
-      const maybeNewProjectDir = getProjectRootDir(
-        vscode.window.activeTextEditor.document.uri
-      );
+    (editor) => {
+      if (!editor) {
+        return;
+      }
+      const maybeNewProjectDir = getProjectRootDir(editor.document.uri);
       if (maybeNewProjectDir && maybeNewProjectDir !== currentProjectDir) {
         currentProjectDir = maybeNewProjectDir;
         updateStatusBar(statusBarItem, currentProjectDir);
