@@ -19,6 +19,7 @@ export const EXT_TO_MIME_TYPES: Record<string, string> = {
   aam: "application/x-authorware-map",
   aas: "application/x-authorware-seg",
   air: "application/vnd.adobe.air-application-installer-package+zip",
+  avif: "image/avif",
   swf: "application/x-shockwave-flash",
   fxp: "application/vnd.adobe.fxp",
   pdf: "application/pdf",
@@ -50,7 +51,6 @@ export const EXT_TO_MIME_TYPES: Record<string, string> = {
   ac: "application/pkix-attr-cert",
   aif: "audio/x-aiff",
   avi: "video/x-msvideo",
-  avif: "image/avif",
   aep: "application/vnd.audiograph",
   dxf: "image/vnd.dxf",
   dwf: "model/vnd.dwf",
@@ -121,7 +121,7 @@ export const EXT_TO_MIME_TYPES: Record<string, string> = {
   uvi: "image/vnd.dece.graphic",
   uvh: "video/vnd.dece.hd",
   uvm: "video/vnd.dece.mobile",
-  uvu: "video/vnd.dece.mp4",
+  uvu: "video/vnd.uvvu.mp4",
   uvp: "video/vnd.dece.pd",
   uvs: "video/vnd.dece.sd",
   uvv: "video/vnd.dece.video",
@@ -229,7 +229,7 @@ export const EXT_TO_MIME_TYPES: Record<string, string> = {
   hvs: "application/vnd.yamaha.hv-script",
   hvd: "application/vnd.yamaha.hv-dic",
   hvp: "application/vnd.yamaha.hv-voice",
-  sfd_hdstx: "application/vnd.hydrostatix.sof-data",
+  "sfd-hdstx": "application/vnd.hydrostatix.sof-data",
   stk: "application/hyperstudio",
   hal: "application/vnd.hal+xml",
   html: "text/html",
@@ -268,8 +268,8 @@ export const EXT_TO_MIME_TYPES: Record<string, string> = {
   json: "application/json",
   joda: "application/vnd.joost.joda-archive",
   jpm: "video/jpm",
-  jpg: "image/jpeg",
   jpeg: "image/jpeg",
+  jpg: "image/jpeg",
   pjpeg: "image/pjpeg",
   jpgv: "video/jpeg",
   ktz: "application/vnd.kahootz",
@@ -418,7 +418,7 @@ export const EXT_TO_MIME_TYPES: Record<string, string> = {
   msty: "application/vnd.muvee.style",
   mxml: "application/xv+xml",
   ngdat: "application/vnd.nokia.n-gage.data",
-  n_gage: "application/vnd.nokia.n-gage.symbian.install",
+  "n-gage": "application/vnd.nokia.n-gage.symbian.install",
   ncx: "application/x-dtbncx+xml",
   nc: "application/x-netcdf",
   nlu: "application/vnd.neurolanguage.nlu",
@@ -525,7 +525,7 @@ export const EXT_TO_MIME_TYPES: Record<string, string> = {
   ssf: "application/vnd.epson.ssf",
   qam: "application/vnd.epson.quickanime",
   qfx: "application/vnd.intu.qfx",
-  qt: "video/quicktime",
+  mov: "video/quicktime",
   rar: "application/x-rar-compressed",
   ram: "audio/x-pn-realaudio",
   rmp: "audio/x-pn-realaudio-plugin",
@@ -690,7 +690,7 @@ export const EXT_TO_MIME_TYPES: Record<string, string> = {
   zaz: "application/vnd.zzazz.deck+xml",
 };
 
-export const MIME_TYPES_TO_EXT: Record<string, string> = {};
-for (const [ext, mimeType] of Object.entries(EXT_TO_MIME_TYPES)) {
-  MIME_TYPES_TO_EXT[mimeType] = ext;
-}
+// TODO: write this out to avoid compute
+export const MIME_TYPES_TO_EXT = Object.fromEntries(
+  Object.entries(EXT_TO_MIME_TYPES).map(([k, v]) => [v, k])
+);
