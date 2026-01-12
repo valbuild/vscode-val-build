@@ -16,6 +16,7 @@ import { uploadRemoteFileCommand } from "./commands/uploadRemoteFile";
 import { loginCommand } from "./commands/loginCommand";
 import { getAddMetadataFix } from "./getAddMetadataFix";
 import { downloadRemoteFileCommand } from "./commands/downloadRemoteFile";
+import { addModuleToValModulesCommand } from "./commands/addModuleToValModules";
 
 let client: LanguageClient;
 let statusBarItem: vscode.StatusBarItem;
@@ -23,7 +24,9 @@ let currentProjectDir: string;
 
 export function activate(context: ExtensionContext) {
   const currentEditor = vscode.window.activeTextEditor;
-  currentProjectDir = getProjectRootDir(currentEditor.document.uri);
+  if (currentEditor) {
+    currentProjectDir = getProjectRootDir(currentEditor.document.uri);
+  }
   statusBarItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
     100
@@ -52,15 +55,20 @@ export function activate(context: ExtensionContext) {
       "val.downloadRemoteFile",
       downloadRemoteFileCommand
     ),
-    vscode.commands.registerCommand("val.login", loginCommand(statusBarItem))
+    vscode.commands.registerCommand("val.login", loginCommand(statusBarItem)),
+    vscode.commands.registerCommand(
+      "val.addModuleToValModules",
+      addModuleToValModulesCommand
+    )
   );
   updateStatusBar(statusBarItem, currentProjectDir);
 
   vscode.window.onDidChangeActiveTextEditor(
-    () => {
-      const maybeNewProjectDir = getProjectRootDir(
-        vscode.window.activeTextEditor.document.uri
-      );
+    (editor) => {
+      if (!editor) {
+        return;
+      }
+      const maybeNewProjectDir = getProjectRootDir(editor.document.uri);
       if (maybeNewProjectDir && maybeNewProjectDir !== currentProjectDir) {
         currentProjectDir = maybeNewProjectDir;
         updateStatusBar(statusBarItem, currentProjectDir);
@@ -94,7 +102,7 @@ export function activate(context: ExtensionContext) {
     ],
     synchronize: {
       fileEvents: workspace.createFileSystemWatcher(
-        "**/*.val.t{s,s},**/val.config.{t,j}s"
+        "**/*.val.{t,j}s,**/val.config.{t,j}s,**/val.modules.{t,j}s"
       ),
     },
   };
@@ -212,6 +220,17 @@ export class ValActionProvider implements vscode.CodeActionProvider {
               code: diag.code,
             },
           ],
+        };
+        actions.push(fix);
+      } else if (diag.code === "val:missing-module") {
+        const fix = new vscode.CodeAction(
+          "Add module to val.modules",
+          vscode.CodeActionKind.QuickFix
+        );
+        fix.command = {
+          title: "Add module to val.modules",
+          command: "val.addModuleToValModules",
+          arguments: [(diag as any).data],
         };
         actions.push(fix);
       }

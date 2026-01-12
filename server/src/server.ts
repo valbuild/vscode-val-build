@@ -11,9 +11,11 @@ import {
   TextDocumentPositionParams,
   TextDocumentSyncKind,
   InitializeResult,
+  CodeAction,
+  CodeActionKind,
+  TextEdit,
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
-import { Service, createService } from "@valbuild/server";
 import {
   FILE_REF_PROP,
   FileSource,
@@ -32,8 +34,23 @@ import { glob } from "glob";
 import path from "path";
 import fs from "fs";
 import { stackToLine } from "./stackToLine";
-import { error } from "console";
 import { getFileExt } from "./getFileExt";
+import { SerializedRegExpPattern } from "./routeValidation";
+import { checkRouteIsValid } from "./checkRoute";
+import { findSimilar } from "./findSimilar";
+import { levenshtein } from "./levenshtein";
+import {
+  findValModulesFile,
+  createValModulesRuntime,
+  evaluateValModulesFile,
+  evaluateSingleModule,
+  ValModuleResult,
+} from "./valModules";
+import { isFileInValModulesAST } from "./isFileInValModulesAST";
+import { detectCompletionContext, isValFile } from "./completionContext";
+import { CompletionProviderRegistry } from "./completionProviders";
+import { ValService } from "./ValService";
+import { PublicValFilesCache } from "./publicValFilesCache";
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -48,8 +65,25 @@ let hasDiagnosticRelatedInformationCapability = false;
 const cache = new Map<string, any>();
 let valRoots: string[] = [];
 let servicesByValRoot: {
-  [valRoot: string]: Service;
+  [valRoot: string]: ValService;
 } = {};
+let valModulesFilesByValRoot: {
+  [valRoot: string]: string;
+} = {};
+let runtimesByValRoot: {
+  [valRoot: string]: ReturnType<typeof createValModulesRuntime>;
+} = {};
+// Store index -> path mappings for each val root for optimized validation
+let moduleIndexMappingsByValRoot: {
+  [valRoot: string]: Map<string, number>; // path -> index
+} = {};
+// Initialize public val files cache
+const publicValFilesCache = new PublicValFilesCache();
+// Initialize completion provider registry
+const completionProviderRegistry = new CompletionProviderRegistry(
+  publicValFilesCache
+);
+
 connection.onInitialize(async (params: InitializeParams) => {
   const capabilities = params.capabilities;
 
@@ -69,6 +103,7 @@ connection.onInitialize(async (params: InitializeParams) => {
 
   // TODO: we are using file directories etc at the FILE SYSTEM level. We could create a host FS for VS Code, but it was easier to use FS to get started
   const valConfigFiles = [];
+  const valModulesFiles = [];
   const packageJsonFiles = [];
   for (const workspaceFolder of params.workspaceFolders || []) {
     valConfigFiles.push(
@@ -77,47 +112,52 @@ connection.onInitialize(async (params: InitializeParams) => {
         {}
       ))
     );
+    valModulesFiles.push(
+      ...(await glob(
+        `${uriToFsPath(workspaceFolder.uri)}/**/val.modules.{t,j}s`,
+        {}
+      ))
+    );
     packageJsonFiles.push(
       ...(await glob(`${uriToFsPath(workspaceFolder.uri)}/**/package.json`, {}))
     );
   }
   valRoots = getValRoots(valConfigFiles, packageJsonFiles);
+
+  // Map val.modules files to their respective valRoots
+  valModulesFilesByValRoot = {};
+  for (const valRoot of valRoots) {
+    const valModulesFile = findValModulesFile(valRoot, valModulesFiles);
+    if (valModulesFile) {
+      valModulesFilesByValRoot[valRoot] = valModulesFile;
+      console.log(
+        `Found val.modules file for root '${valRoot}': ${valModulesFile}`
+      );
+    }
+  }
+
+  // Create file system abstraction for Val services
+  const cachedFileSystem = createCachedFileSystem(cache);
+
+  // Initialize services for each Val root
   servicesByValRoot = Object.fromEntries(
     await Promise.all(
       valRoots
         .filter((valRoot) => !valRoot.includes("node_modules"))
         .map(async (valRoot) => {
-          console.log("Initializing Val Service for: '" + valRoot + "'...");
-          const service = await createService(
-            valRoot,
-            {
-              disableCache: true,
-            },
-            {
-              ...ts.sys,
-              rmFile: fs.unlinkSync,
-              readFile(path) {
-                if (cache.has(path)) {
-                  return cache.get(path);
-                }
-                const content = fs.readFileSync(path, "utf8");
-                cache.set(path, content);
-                return content;
-              },
-              writeFile(fileName, data, encoding) {
-                if (typeof data !== "string") {
-                  fs.writeFileSync(fileName, data.toString("utf-8"), encoding);
-                } else {
-                  fs.writeFileSync(fileName, data, encoding);
-                }
-              },
-            }
-          );
-          console.log("Created Val Service! Root: '" + valRoot + "'");
+          const service = await initializeService(valRoot, cachedFileSystem);
           return [valRoot, service];
         })
     )
   );
+
+  // Initialize public val files cache for each Val root
+  for (const valRoot of valRoots.filter(
+    (valRoot) => !valRoot.includes("node_modules")
+  )) {
+    await publicValFilesCache.initialize(valRoot);
+    console.log(`Initialized public val files cache for root: ${valRoot}`);
+  }
 
   const result: InitializeResult = {
     capabilities: {
@@ -125,6 +165,9 @@ connection.onInitialize(async (params: InitializeParams) => {
       // Tell the client that this server supports code completion.
       completionProvider: {
         resolveProvider: true,
+      },
+      codeActionProvider: {
+        codeActionKinds: [CodeActionKind.QuickFix],
       },
     },
   };
@@ -233,26 +276,454 @@ function uriToFsPath(uri: string): string {
   return uri.replace("file://", "");
 }
 
+// File system operations abstraction for Val service
+interface ValFileSystem {
+  readFile: (path: string) => string | undefined;
+  writeFile: (fileName: string, data: string | Buffer, encoding?: any) => void;
+  rmFile: (path: string) => void;
+}
+
+// Create a cached file system implementation
+function createCachedFileSystem(cache: Map<string, any>): ValFileSystem {
+  return {
+    readFile(filePath: string): string | undefined {
+      if (cache.has(filePath)) {
+        return cache.get(filePath);
+      }
+      const content = fs.readFileSync(filePath, "utf8");
+      cache.set(filePath, content);
+      return content;
+    },
+    writeFile(fileName: string, data: string | Buffer, encoding?: any): void {
+      if (typeof data !== "string") {
+        fs.writeFileSync(fileName, data.toString("utf-8"), encoding as any);
+      } else {
+        fs.writeFileSync(fileName, data, encoding as any);
+      }
+    },
+    rmFile: fs.unlinkSync,
+  };
+}
+
+// Initialize a service for a given root directory
+async function initializeService(
+  valRoot: string,
+  fileSystem: ValFileSystem
+): Promise<ValService> {
+  console.log("Initializing Val Service for: '" + valRoot + "'...");
+
+  // Find tsconfig.json or jsconfig.json
+  const configPath = findConfigFile(valRoot);
+  if (!configPath) {
+    console.error(`No tsconfig.json or jsconfig.json found for: ${valRoot}`);
+    throw new Error(`No config file found for Val root: ${valRoot}`);
+  }
+
+  // Create custom host that uses our cached file system
+  const host: ts.ParseConfigHost = {
+    readDirectory: ts.sys.readDirectory,
+    fileExists: (fileName: string) => {
+      try {
+        return ts.sys.fileExists(fileName);
+      } catch {
+        return false;
+      }
+    },
+    readFile: (fileName: string) => {
+      try {
+        return fileSystem.readFile(fileName);
+      } catch {
+        return undefined;
+      }
+    },
+    useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+  };
+
+  // Create runtime with custom host
+  const runtime = createValModulesRuntime(host, configPath);
+
+  // Store runtime for cache invalidation
+  runtimesByValRoot[valRoot] = runtime;
+
+  // Get val.modules file path
+  const valModulesFile = valModulesFilesByValRoot[valRoot];
+  if (!valModulesFile) {
+    console.error(`No val.modules file found for: ${valRoot}`);
+    throw new Error(`No val.modules file found for Val root: ${valRoot}`);
+  }
+
+  console.log("Created Val Service! Root: '" + valRoot + "'");
+
+  // Initialize index mapping
+  if (!moduleIndexMappingsByValRoot[valRoot]) {
+    moduleIndexMappingsByValRoot[valRoot] = new Map();
+  }
+
+  // Helper to get all modules and build index mapping
+  const getAllModulesAndBuildIndex = async (): Promise<
+    ValModuleResult[] | null
+  > => {
+    const modules = await evaluateValModulesFile(runtime, valModulesFile);
+    if (modules) {
+      // Build index mapping: path -> index
+      const indexMapping = moduleIndexMappingsByValRoot[valRoot];
+      indexMapping.clear();
+      modules.forEach((module, index) => {
+        if (module.path) {
+          indexMapping.set(module.path, index);
+        }
+      });
+    }
+    return modules;
+  };
+
+  // Helper to get a single module by path using index
+  const getSingleModuleByPath = async (
+    path: string
+  ): Promise<{ module: ValModuleResult; fromIndex: boolean } | null> => {
+    const indexMapping = moduleIndexMappingsByValRoot[valRoot];
+    const index = indexMapping.get(path);
+
+    if (index !== undefined) {
+      // Try to evaluate by index
+      const module = await evaluateSingleModule(runtime, valModulesFile, index);
+
+      if (module && module.path === path) {
+        // Index is still valid
+        return { module, fromIndex: true };
+      }
+
+      // Index is invalid, need to rebuild
+      console.log(`Index mapping invalid for ${path}, rebuilding...`);
+    }
+
+    // Fall back to full evaluation
+    const modules = await getAllModulesAndBuildIndex();
+    if (!modules) {
+      return null;
+    }
+
+    const foundModule = modules.find((m) => m.path === path);
+    return foundModule ? { module: foundModule, fromIndex: false } : null;
+  };
+
+  // Return service interface
+  return {
+    getAllModulePaths: async () => {
+      const modules = await getAllModulesAndBuildIndex();
+      if (!modules) {
+        return [];
+      }
+      return modules
+        .filter((m) => m.path !== undefined)
+        .map((m) => m.path as string);
+    },
+    getAllModules: async () => {
+      const modules = await getAllModulesAndBuildIndex();
+      return modules || [];
+    },
+    read: async (moduleFilePath, modulePath, options) => {
+      try {
+        // Find the matching module
+        const normalizedModuleFilePath = moduleFilePath.startsWith("/")
+          ? moduleFilePath
+          : "/" + moduleFilePath;
+
+        const result = await getSingleModuleByPath(normalizedModuleFilePath);
+
+        if (!result) {
+          return {
+            path: (moduleFilePath + modulePath) as SourcePath,
+            errors: {
+              invalidModulePath: moduleFilePath,
+            },
+          };
+        }
+
+        const matchingModule = result.module;
+
+        // Check for runtime errors
+        if (matchingModule.runtimeError) {
+          return {
+            path: (moduleFilePath + modulePath) as SourcePath,
+            errors: {
+              fatal: [
+                {
+                  message: matchingModule.message || "Runtime error in module",
+                },
+              ],
+            },
+          };
+        }
+
+        // Check if there are validation errors
+        const hasValidationErrors =
+          matchingModule.validation &&
+          Object.keys(matchingModule.validation).length > 0;
+
+        // Return result with or without validation errors
+        if (matchingModule.schema && matchingModule.source) {
+          return {
+            source: matchingModule.source,
+            schema: matchingModule.schema,
+            path: (moduleFilePath + modulePath) as SourcePath,
+            errors: hasValidationErrors
+              ? {
+                  validation: matchingModule.validation,
+                }
+              : false,
+          };
+        }
+
+        // Return result with validation errors (when schema or source is missing)
+        return {
+          source: matchingModule.source,
+          schema: matchingModule.schema,
+          path: (moduleFilePath + modulePath) as SourcePath,
+          errors: {
+            validation: matchingModule.validation || false,
+          },
+        };
+      } catch (err) {
+        console.error("Error reading module:", err);
+        return {
+          path: (moduleFilePath + modulePath) as SourcePath,
+          errors: {
+            fatal: [
+              {
+                message: err instanceof Error ? err.message : "Unknown error",
+                stack: err instanceof Error ? err.stack : undefined,
+              },
+            ],
+          },
+        };
+      }
+    },
+  };
+}
+
+// Find tsconfig.json or jsconfig.json by walking up the directory tree
+function findConfigFile(startPath: string): string | null {
+  let currentDir = startPath;
+
+  // Walk up the directory tree
+  while (true) {
+    // Check for tsconfig.json first
+    const tsconfigPath = path.join(currentDir, "tsconfig.json");
+    if (fs.existsSync(tsconfigPath)) {
+      return tsconfigPath;
+    }
+
+    // Check for jsconfig.json
+    const jsconfigPath = path.join(currentDir, "jsconfig.json");
+    if (fs.existsSync(jsconfigPath)) {
+      return jsconfigPath;
+    }
+
+    // Move up one directory
+    const parentDir = path.dirname(currentDir);
+
+    // If we've reached the root, stop
+    if (parentDir === currentDir) {
+      break;
+    }
+
+    currentDir = parentDir;
+  }
+
+  return null;
+}
+
+// Helper function to check if a file exports default c.define()
+// Returns the position of the export statement if found
+function hasDefaultCDefineExport(fileContent: string): {
+  found: boolean;
+  line?: number;
+  character?: number;
+  endLine?: number;
+  endCharacter?: number;
+  valPath?: string;
+  isValid?: boolean;
+} {
+  try {
+    const sourceFile = ts.createSourceFile(
+      "temp.ts",
+      fileContent,
+      ts.ScriptTarget.Latest,
+      true
+    );
+
+    for (const statement of sourceFile.statements) {
+      if (ts.isExportAssignment(statement) && !statement.isExportEquals) {
+        const expression = statement.expression;
+        if (
+          ts.isCallExpression(expression) &&
+          ts.isPropertyAccessExpression(expression.expression)
+        ) {
+          const obj = expression.expression.expression;
+          const method = expression.expression.name;
+          if (
+            ts.isIdentifier(obj) &&
+            obj.text === "c" &&
+            ts.isIdentifier(method) &&
+            method.text === "define"
+          ) {
+            // Check that c.define has exactly 3 arguments
+            if (expression.arguments.length !== 3) {
+              return { found: false, isValid: false };
+            }
+
+            // Check that the first argument is a string literal
+            const firstArg = expression.arguments[0];
+            if (!ts.isStringLiteral(firstArg)) {
+              return { found: false, isValid: false };
+            }
+
+            const valPath = firstArg.text;
+
+            // Get the position of the export statement
+            const start = sourceFile.getLineAndCharacterOfPosition(
+              statement.getStart(sourceFile)
+            );
+            const end = sourceFile.getLineAndCharacterOfPosition(
+              statement.getEnd()
+            );
+            return {
+              found: true,
+              line: start.line,
+              character: start.character,
+              endLine: end.line,
+              endCharacter: end.character,
+              valPath: valPath,
+              isValid: true,
+            };
+          }
+        }
+      }
+    }
+    return { found: false };
+  } catch {
+    return { found: false };
+  }
+}
+
 const textEncoder = new TextEncoder();
+
+// Track documents currently being validated to prevent cascading revalidations
+const validatingDocuments = new Set<string>();
+
 async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   const text = textDocument.getText();
   let diagnostics: Diagnostic[] = [];
   const fsPath = decodeURIComponent(uriToFsPath(textDocument.uri));
+
+  // Prevent cascading revalidations
+  if (validatingDocuments.has(fsPath)) {
+    console.log(
+      `Skipping revalidation for ${fsPath} - already being validated`
+    );
+    return;
+  }
+
+  // Mark as being validated
+  validatingDocuments.add(fsPath);
+
+  try {
+    await validateTextDocumentInternal(textDocument, text, fsPath, diagnostics);
+  } finally {
+    // Always remove from the set when done
+    validatingDocuments.delete(fsPath);
+  }
+}
+
+async function validateTextDocumentInternal(
+  textDocument: TextDocument,
+  text: string,
+  fsPath: string,
+  diagnostics: Diagnostic[]
+): Promise<void> {
   const valRoot = valRoots?.find((valRoot) => fsPath.startsWith(valRoot));
   const service = valRoot ? servicesByValRoot[valRoot] : undefined;
   const isValModule = fsPath.includes(".val.ts") || fsPath.includes(".val.js");
+
   const isValRelatedFile =
     isValModule ||
     fsPath.includes("val.config.ts") ||
-    fsPath.includes("val.config.js");
+    fsPath.includes("val.config.js") ||
+    fsPath.includes("val.modules.ts") ||
+    fsPath.includes("val.modules.js");
+
   if (isValRelatedFile) {
     cache.set(fsPath, text);
+
+    // Invalidate runtime cache for this file
+    if (valRoot && runtimesByValRoot[valRoot]) {
+      runtimesByValRoot[valRoot].invalidateFile(fsPath);
+
+      // Also invalidate the system file that runs validation
+      // This ensures validation is re-run with fresh data
+      const valModulesFile = valModulesFilesByValRoot[valRoot];
+      if (valModulesFile) {
+        const valModulesDir = path.dirname(valModulesFile);
+        const systemFile = path.join(valModulesDir, "<system>.ts");
+        runtimesByValRoot[valRoot].invalidateFile(systemFile);
+
+        // Invalidate all system files for index-based validation
+        for (let i = 0; i < 100; i++) {
+          const indexSystemFile = path.join(valModulesDir, `<system-${i}>.ts`);
+          runtimesByValRoot[valRoot].invalidateFile(indexSystemFile);
+        }
+      }
+
+      // If val.modules file itself changed, clear the index mapping
+      if (fsPath.includes("val.modules")) {
+        console.log(
+          `val.modules changed, clearing index mapping for: ${valRoot}`
+        );
+        if (moduleIndexMappingsByValRoot[valRoot]) {
+          moduleIndexMappingsByValRoot[valRoot].clear();
+        }
+
+        // Revalidate all open .val.ts files since they might now be included/excluded
+        console.log(`Revalidating all open .val.ts files for: ${valRoot}`);
+        documents.all().forEach((doc) => {
+          const docPath = decodeURIComponent(uriToFsPath(doc.uri));
+          if (
+            docPath.startsWith(valRoot) &&
+            (docPath.includes(".val.ts") || docPath.includes(".val.js"))
+          ) {
+            // Don't await - let them validate in parallel
+            validateTextDocument(doc);
+          }
+        });
+      } else if (isValModule) {
+        // If a .val file changed, revalidate all other open .val files
+        // since they might depend on this file's schema (e.g., via keyOf)
+        console.log(
+          `Val module changed: ${fsPath}, revalidating dependent files for: ${valRoot}`
+        );
+        documents.all().forEach((doc) => {
+          const docPath = decodeURIComponent(uriToFsPath(doc.uri));
+          // Skip the current file (it will be validated anyway)
+          // and only revalidate other .val files in the same valRoot
+          if (
+            docPath !== fsPath &&
+            docPath.startsWith(valRoot) &&
+            (docPath.includes(".val.ts") || docPath.includes(".val.js"))
+          ) {
+            // Don't await - let them validate in parallel
+            validateTextDocument(doc);
+          }
+        });
+      }
+    }
   }
   if (valRoot && service && isValModule) {
-    const { source, schema, errors } = await service.get(
+    const { source, schema, errors } = await service.read(
       fsPath.replace(valRoot, "") as ModuleFilePath,
       "" as ModulePath
     );
+
     if (errors && errors.fatal) {
       for (const error of errors.fatal || []) {
         if (error.stack) {
@@ -317,27 +788,36 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                   error.fixes?.includes("image:upload-remote") ||
                   error.fixes?.includes("file:upload-remote"))
               ) {
-                const { source: sourceAtPath } = Internal.resolvePath(
-                  modulePath,
-                  source,
-                  schema
-                );
-                const ref = (sourceAtPath as FileSource)[FILE_REF_PROP];
-                const absFilePath = path.join(valRoot, ...ref.split("/"));
-                if (!fs.existsSync(absFilePath)) {
-                  const diagnostic: Diagnostic = {
-                    severity: DiagnosticSeverity.Error,
-                    range,
-                    code: "file-not-found",
-                    message: "File " + absFilePath + " does not exist",
-                    source: "val",
-                  };
-                  diagnostics = [diagnostic];
-                  connection.sendDiagnostics({
-                    uri: textDocument.uri,
-                    diagnostics,
-                  });
-                  return;
+                try {
+                  const { source: sourceAtPath } = Internal.resolvePath(
+                    modulePath,
+                    source,
+                    schema
+                  );
+                  const ref = (sourceAtPath as FileSource)[FILE_REF_PROP];
+                  const absFilePath = path.join(valRoot, ...ref.split("/"));
+                  if (!fs.existsSync(absFilePath)) {
+                    const diagnostic: Diagnostic = {
+                      severity: DiagnosticSeverity.Error,
+                      range,
+                      code: "file-not-found",
+                      message: "File " + absFilePath + " does not exist",
+                      source: "val",
+                    };
+                    diagnostics = [diagnostic];
+                    connection.sendDiagnostics({
+                      uri: textDocument.uri,
+                      diagnostics,
+                    });
+                    return;
+                  }
+                } catch (err) {
+                  console.error(
+                    `[ERROR] Failed to resolve path for modulePath: ${modulePath}`,
+                    err
+                  );
+                  // Don't crash - just skip this diagnostic
+                  continue;
                 }
               }
               // Skipping these for now, since we do not have hot fix yet
@@ -355,6 +835,9 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                 );
                 const keyOfFix = error.fixes?.find(
                   (fix) => fix === "keyof:check-keys"
+                );
+                const routerFix = error.fixes?.find(
+                  (fix) => fix === "router:check-route"
                 );
                 const uploadRemoteFileFix = error.fixes?.find(
                   (fix) =>
@@ -387,7 +870,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                       Internal.splitModuleFilePathAndModulePath(
                         sourcePath as SourcePath
                       );
-                    const refModule = await service.get(
+                    const refModule = await service.read(
                       moduleFilePath,
                       modulePath
                     );
@@ -402,6 +885,83 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                     );
                     // NOTE: this ignores error
                   }
+                } else if (source && schema && routerFix) {
+                  // Validate route existence and patterns
+                  console.log(
+                    "[DEBUG router:check-route] error.value:",
+                    error.value,
+                    "type:",
+                    typeof error.value
+                  );
+
+                  // Extract route and patterns from error.value
+                  let route: string;
+                  let include: SerializedRegExpPattern | undefined;
+                  let exclude: SerializedRegExpPattern | undefined;
+
+                  if (typeof error.value === "string") {
+                    // Old format: just a string
+                    route = error.value;
+                    // Extract router configuration from schema
+                    if ("router" in schema && schema.router) {
+                      const routerConfig = schema.router as any;
+                      include = routerConfig.include as
+                        | SerializedRegExpPattern
+                        | undefined;
+                      exclude = routerConfig.exclude as
+                        | SerializedRegExpPattern
+                        | undefined;
+                    }
+                  } else if (
+                    typeof error.value === "object" &&
+                    error.value &&
+                    "route" in error.value &&
+                    typeof error.value.route === "string"
+                  ) {
+                    // New format: object with route, include, exclude
+                    route = error.value.route;
+                    include = error.value.include as
+                      | SerializedRegExpPattern
+                      | undefined;
+                    exclude = error.value.exclude as
+                      | SerializedRegExpPattern
+                      | undefined;
+                  } else {
+                    console.error(
+                      "[ERROR router:check-route] Expected error.value to be a string or object with route property, but got:",
+                      typeof error.value,
+                      error.value
+                    );
+                    // NOTE: this ignores error - same as keyof:check-keys handling
+                    continue;
+                  }
+
+                  console.log(
+                    "[DEBUG router:check-route] Validating route:",
+                    route,
+                    "include:",
+                    include,
+                    "exclude:",
+                    exclude
+                  );
+
+                  // Validate route existence and patterns
+                  const validationResult = await checkRouteIsValid(
+                    route,
+                    include,
+                    exclude,
+                    service
+                  );
+
+                  console.log(
+                    "[DEBUG router:check-route] Validation result:",
+                    validationResult
+                  );
+
+                  if (validationResult.error) {
+                    diagnostic.message = validationResult.message;
+                    diagnostics.push(diagnostic);
+                  }
                 } else if (source && schema && addMetadataFix) {
                   diagnostic.code = addMetadataFix;
                   // TODO: this doesn't seem to work
@@ -412,57 +972,67 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
                   // );
                   diagnostics.push(diagnostic);
                 } else if (source && schema && uploadRemoteFileFix) {
-                  const {
-                    source: resolvedSourceAtPath,
-                    schema: resolvedSchemaAtPath,
-                  } = Internal.resolvePath(modulePath, source, schema);
-                  const filePath = (resolvedSourceAtPath as any)?.[
-                    FILE_REF_PROP
-                  ];
-                  if (typeof filePath !== "string") {
+                  try {
+                    const {
+                      source: resolvedSourceAtPath,
+                      schema: resolvedSchemaAtPath,
+                    } = Internal.resolvePath(modulePath, source, schema);
+                    const filePath = (resolvedSourceAtPath as any)?.[
+                      FILE_REF_PROP
+                    ];
+                    if (typeof filePath !== "string") {
+                      console.error(
+                        "Expected filePath to be a string, but found " +
+                          typeof filePath,
+                        "in",
+                        JSON.stringify(source)
+                      );
+                      continue;
+                    }
+                    if (
+                      resolvedSchemaAtPath.type !== "file" &&
+                      resolvedSchemaAtPath.type !== "image"
+                    ) {
+                      console.error(
+                        "Expected schema to be a file or image, but found " +
+                          resolvedSchemaAtPath.type,
+                        "in",
+                        JSON.stringify(source)
+                      );
+                      return;
+                    }
+                    const fileExt = getFileExt(filePath);
+                    const metadata = (resolvedSourceAtPath as any).metadata;
+                    const fileHash = Internal.remote.getFileHash(
+                      fs.readFileSync(
+                        path.join(valRoot, ...filePath.split("/"))
+                      ) as Buffer
+                    );
+                    diagnostic.code =
+                      uploadRemoteFileFix +
+                      ":" +
+                      // TODO: figure out a different way to send the ValidationHash - we need it when creating refs in the client extension which is why we do it like this now...
+                      Internal.remote.getValidationHash(
+                        Internal.VERSION.core || "unknown",
+                        resolvedSchemaAtPath as
+                          | SerializedFileSchema
+                          | SerializedImageSchema,
+                        fileExt,
+                        metadata,
+                        fileHash,
+                        textEncoder
+                      );
+                    diagnostic.message =
+                      "Expected remote file, but found local";
+                    diagnostics.push(diagnostic);
+                  } catch (err) {
                     console.error(
-                      "Expected filePath to be a string, but found " +
-                        typeof filePath,
-                      "in",
-                      JSON.stringify(source)
+                      `[ERROR] Failed to resolve path for uploadRemoteFileFix - modulePath: ${modulePath}`,
+                      err
                     );
-                    return;
+                    // Don't crash - just skip this diagnostic
+                    continue;
                   }
-                  if (
-                    resolvedSchemaAtPath.type !== "file" &&
-                    resolvedSchemaAtPath.type !== "image"
-                  ) {
-                    console.error(
-                      "Expected schema to be a file or image, but found " +
-                        resolvedSchemaAtPath.type,
-                      "in",
-                      JSON.stringify(source)
-                    );
-                    return;
-                  }
-                  const fileExt = getFileExt(filePath);
-                  const metadata = (resolvedSourceAtPath as any).metadata;
-                  const fileHash = Internal.remote.getFileHash(
-                    fs.readFileSync(
-                      path.join(valRoot, ...filePath.split("/"))
-                    ) as Buffer
-                  );
-                  diagnostic.code =
-                    uploadRemoteFileFix +
-                    ":" +
-                    // TODO: figure out a different way to send the ValidationHash - we need it when creating refs in the client extension which is why we do it like this now...
-                    Internal.remote.getValidationHash(
-                      Internal.VERSION.core || "unknown",
-                      resolvedSchemaAtPath as
-                        | SerializedFileSchema
-                        | SerializedImageSchema,
-                      fileExt,
-                      metadata,
-                      fileHash,
-                      textEncoder
-                    );
-                  diagnostic.message = "Expected remote file, but found local";
-                  diagnostics.push(diagnostic);
                 } else if (source && schema && downloadRemoteFileFix) {
                   diagnostic.message = "Expected locale file, but found remote";
                   diagnostic.code = downloadRemoteFileFix;
@@ -478,38 +1048,55 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
     }
   }
 
-  // Send the computed diagnostics to VSCode.
-  connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
-}
-
-// GPT generated levenshtein distance algorithm:
-const levenshtein = (a: string, b: string): number => {
-  const [m, n] = [a.length, b.length];
-  if (!m || !n) return Math.max(m, n);
-
-  const dp = Array.from({ length: m + 1 }, (_, i) => i);
-
-  for (let j = 1; j <= n; j++) {
-    let prev = dp[0];
-    dp[0] = j;
-
-    for (let i = 1; i <= m; i++) {
-      const temp = dp[i];
-      dp[i] =
-        a[i - 1] === b[j - 1]
-          ? prev
-          : Math.min(prev + 1, dp[i - 1] + 1, dp[i] + 1);
-      prev = temp;
+  // Check if this is a .val.ts file with c.define export that's not in val.modules
+  if (isValModule && valRoot && text && service) {
+    const valModulesFile = valModulesFilesByValRoot[valRoot];
+    if (valModulesFile) {
+      const exportInfo = hasDefaultCDefineExport(text);
+      const expectedModulePath = fsPath.replace(valRoot, "");
+      if (
+        exportInfo.found &&
+        exportInfo.isValid &&
+        exportInfo.valPath === expectedModulePath
+      ) {
+        // Check the AST to see if the file is already in val.modules
+        // This prevents false positives when there are runtime errors
+        const isInModules = isFileInValModulesAST(
+          fsPath,
+          valRoot,
+          valModulesFile
+        );
+        if (!isInModules) {
+          const diagnostic: Diagnostic = {
+            severity: DiagnosticSeverity.Warning,
+            range: {
+              start: {
+                line: exportInfo.line || 0,
+                character: exportInfo.character || 0,
+              },
+              end: {
+                line: exportInfo.endLine || exportInfo.line || 0,
+                character: exportInfo.endCharacter || Number.MAX_VALUE,
+              },
+            },
+            message:
+              "This Val module is not registered in val.modules. Add it to val.modules to use it.",
+            source: "val",
+            code: "val:missing-module",
+            data: {
+              filePath: fsPath,
+              valRoot: valRoot,
+              valModulesFile: valModulesFile,
+            },
+          };
+          diagnostics.push(diagnostic);
+        }
+      }
     }
   }
 
-  return dp[m];
-};
-
-function findSimilar(key: string, targets: string[]) {
-  return targets
-    .map((target) => ({ target, distance: levenshtein(key, target) }))
-    .sort((a, b) => a.distance - b.distance);
+  // Send the computed diagnostics to VSCode.
+  connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
 }
 
 function checkKeyOf(
@@ -596,36 +1183,329 @@ connection.onDidChangeWatchedFiles((_change) => {
 
 // This handler provides the initial list of the completion items.
 connection.onCompletion(
-  (_textDocumentPosition: TextDocumentPositionParams): CompletionItem[] => {
-    // The pass parameter contains the position of the text document in
-    // which code complete got requested. For the example we ignore this
-    // info and always provide the same completion items.
-    return [
-      {
-        label: "TypeScript",
-        kind: CompletionItemKind.Text,
-        data: 1,
-      },
-      {
-        label: "JavaScript",
-        kind: CompletionItemKind.Text,
-        data: 2,
-      },
-    ];
+  async (
+    textDocumentPosition: TextDocumentPositionParams
+  ): Promise<CompletionItem[]> => {
+    const document = documents.get(textDocumentPosition.textDocument.uri);
+    if (!document) {
+      return [];
+    }
+
+    const fsPath = decodeURIComponent(
+      uriToFsPath(textDocumentPosition.textDocument.uri)
+    );
+
+    // Only provide completion for .val.ts or .val.js files
+    if (!isValFile(fsPath)) {
+      return [];
+    }
+
+    const valRoot = valRoots?.find((valRoot) => fsPath.startsWith(valRoot));
+    if (!valRoot) {
+      return [];
+    }
+
+    const service = servicesByValRoot[valRoot];
+    if (!service) {
+      return [];
+    }
+
+    const text = document.getText();
+    const position = textDocumentPosition.position;
+
+    // Parse the document to detect context
+    const sourceFile = ts.createSourceFile(
+      fsPath,
+      text,
+      ts.ScriptTarget.Latest,
+      true
+    );
+
+    // Detect the completion context
+    const context = detectCompletionContext(sourceFile, position);
+
+    console.log("[onCompletion] Context detected:", {
+      type: context.type,
+      modulePath: context.modulePath,
+      partialText: context.partialText,
+      hasStringNode: !!context.stringNode,
+    });
+
+    // Get completion items from the appropriate provider
+    // The context detection already checks if it's a router schema for router completion
+    if (context.type !== "none") {
+      console.log(
+        "[onCompletion] Getting completion items for type:",
+        context.type
+      );
+      const items = await completionProviderRegistry.getCompletionItems(
+        context,
+        service,
+        valRoot,
+        sourceFile
+      );
+      console.log("[onCompletion] Returning", items.length, "items");
+      return items;
+    }
+
+    console.log("[onCompletion] No completion context detected");
+    return [];
   }
 );
 
 // This handler resolves additional information for the item selected in
 // the completion list.
-connection.onCompletionResolve((item: CompletionItem): CompletionItem => {
-  if (item.data === 1) {
-    item.detail = "TypeScript details";
-    item.documentation = "TypeScript documentation";
-  } else if (item.data === 2) {
-    item.detail = "JavaScript details";
-    item.documentation = "JavaScript documentation";
+connection.onCompletionResolve(
+  async (item: CompletionItem): Promise<CompletionItem> => {
+    // Check if this is an image or file completion item
+    if (
+      item.data &&
+      typeof item.data === "object" &&
+      (item.data.type === "image" || item.data.type === "file")
+    ) {
+      const { type, filePath, valRoot } = item.data;
+
+      try {
+        // Construct absolute file path
+        const absoluteFilePath = path.join(valRoot, filePath);
+
+        // Get metadata based on type
+        let metadata: Record<string, string | number> = {};
+        if (type === "image") {
+          const { getImageMetadata } = await import("./metadataUtils");
+          const imageMetadata = getImageMetadata(absoluteFilePath);
+          if (imageMetadata) {
+            metadata = imageMetadata as unknown as Record<
+              string,
+              string | number
+            >;
+          }
+        } else if (type === "file") {
+          const { getFileMetadata } = await import("./metadataUtils");
+          const fileMetadata = getFileMetadata(absoluteFilePath);
+          if (fileMetadata) {
+            metadata = fileMetadata as unknown as Record<
+              string,
+              string | number
+            >;
+          }
+        }
+
+        if (metadata && Object.keys(metadata).length > 0) {
+          // Generate metadata object as TypeScript AST
+          const metadataProperties = Object.entries(metadata).map(
+            ([key, value]) =>
+              ts.factory.createPropertyAssignment(
+                ts.factory.createIdentifier(key),
+                typeof value === "number"
+                  ? ts.factory.createNumericLiteral(value)
+                  : ts.factory.createStringLiteral(value)
+              )
+          );
+
+          const metadataObject = ts.factory.createObjectLiteralExpression(
+            metadataProperties,
+            true // multiline
+          );
+
+          // Print the metadata object to text
+          const printer = ts.createPrinter({
+            newLine: ts.NewLineKind.LineFeed,
+          });
+          const sourceFile = ts.createSourceFile(
+            "temp.ts",
+            "",
+            ts.ScriptTarget.Latest,
+            false,
+            ts.ScriptKind.TS
+          );
+          const metadataText = printer.printNode(
+            ts.EmitHint.Unspecified,
+            metadataObject,
+            sourceFile
+          );
+
+          // Add additionalTextEdits to insert metadata after the file path
+          // The textEdit from the provider already handles replacing the file path
+          // We need to add the metadata as the second argument
+          if (item.textEdit && "range" in item.textEdit) {
+            const range = item.textEdit.range;
+            const edits = [];
+
+            // If there's an existing second argument, we need to remove it first
+            if (item.data.hasSecondArgument && item.data.secondArgumentRange) {
+              const secondArgRange = item.data.secondArgumentRange;
+              // Delete from the comma before the second argument to the end of the second argument
+              // We need to go back one character from the start to include the comma and any whitespace
+              edits.push(
+                TextEdit.del({
+                  start: {
+                    line: range.end.line,
+                    character: range.end.character + 1, // +1 to be after the closing quote (at comma)
+                  },
+                  end: {
+                    line: secondArgRange.end.line,
+                    character: secondArgRange.end.character,
+                  },
+                })
+              );
+            }
+
+            // Insert the new metadata after the closing quote of the file path
+            edits.push(
+              TextEdit.insert(
+                {
+                  line: range.end.line,
+                  character: range.end.character + 1, // +1 to be after the closing quote
+                },
+                `, ${metadataText}`
+              )
+            );
+
+            item.additionalTextEdits = edits;
+
+            console.log(
+              `[onCompletionResolve] ${
+                item.data.hasSecondArgument ? "Replaced" : "Added"
+              } metadata for ${type}: ${metadataText}`
+            );
+          }
+        }
+      } catch (error) {
+        console.error(`Error resolving metadata for ${type}:`, error);
+        // Return item without metadata on error
+      }
+    }
+
+    return item;
   }
-  return item;
+);
+
+// Code action handler for automatic fixes
+connection.onCodeAction((params) => {
+  const diagnostics = params.context.diagnostics;
+  const codeActions: CodeAction[] = [];
+
+  for (const diagnostic of diagnostics) {
+    if (diagnostic.code === "val:missing-module" && diagnostic.data) {
+      const { filePath, valRoot, valModulesFile } = diagnostic.data as {
+        filePath: string;
+        valRoot: string;
+        valModulesFile: string;
+      };
+
+      try {
+        const valModulesContent = fs.readFileSync(valModulesFile, "utf-8");
+        const relativePath = path
+          .relative(path.dirname(valModulesFile), filePath)
+          .replace(/\\/g, "/")
+          .replace(/\.val\.ts$/, ".val")
+          .replace(/\.val\.js$/, ".val");
+
+        // Parse the val.modules file to find where to insert the new module
+        const sourceFile = ts.createSourceFile(
+          valModulesFile,
+          valModulesContent,
+          ts.ScriptTarget.Latest,
+          true
+        );
+
+        let insertPosition: { line: number; character: number } | null = null;
+        let modulesArrayNode: ts.ArrayLiteralExpression | null = null;
+        let indentation = "    "; // Default indentation
+
+        // Find the modules array in the config.modules([...])
+        ts.forEachChild(sourceFile, function visit(node) {
+          if (ts.isCallExpression(node)) {
+            if (
+              ts.isPropertyAccessExpression(node.expression) &&
+              node.expression.name.text === "modules" &&
+              node.arguments.length > 0
+            ) {
+              const firstArg = node.arguments[0];
+              if (ts.isArrayLiteralExpression(firstArg)) {
+                modulesArrayNode = firstArg;
+                // Find the last element in the array
+                if (firstArg.elements.length > 0) {
+                  const lastElement =
+                    firstArg.elements[firstArg.elements.length - 1];
+                  const pos = sourceFile.getLineAndCharacterOfPosition(
+                    lastElement.end
+                  );
+                  insertPosition = pos;
+
+                  // Detect indentation from the first element
+                  const firstElement = firstArg.elements[0];
+                  const firstElementPos =
+                    sourceFile.getLineAndCharacterOfPosition(
+                      firstElement.getStart(sourceFile)
+                    );
+                  indentation = " ".repeat(firstElementPos.character);
+                } else {
+                  // Empty array - insert at array start
+                  const arrayStart = sourceFile.getLineAndCharacterOfPosition(
+                    firstArg.getStart(sourceFile) + 1 // After the '['
+                  );
+                  insertPosition = arrayStart;
+                }
+              }
+            }
+          }
+          ts.forEachChild(node, visit);
+        });
+
+        if (insertPosition !== null && modulesArrayNode !== null) {
+          // Generate the import statement
+          const importStatement = `import("./${relativePath}")`;
+
+          // Determine if we need a comma before or after
+          const arrayNode = modulesArrayNode as ts.ArrayLiteralExpression;
+          const hasElements = arrayNode.elements.length > 0;
+          const newText = hasElements
+            ? `,\n${indentation}${importStatement}`
+            : `\n${indentation}${importStatement}\n${indentation.slice(2)}`;
+
+          // Create a workspace edit to add the module
+          const textDocumentUri = `file://${valModulesFile}`;
+          const edit = {
+            changes: {
+              [textDocumentUri]: [
+                {
+                  range: {
+                    start: insertPosition,
+                    end: insertPosition,
+                  },
+                  newText: newText,
+                },
+              ],
+            },
+          };
+
+          const action: CodeAction = {
+            title: "Add module to val.modules",
+            kind: CodeActionKind.QuickFix,
+            diagnostics: [diagnostic],
+            edit: edit,
+          };
+
+          codeActions.push(action);
+        }
+      } catch (error) {
+        console.error(
+          "Failed to create code action for missing module:",
+          error
+        );
+      }
+    }
+  }
+
+  return codeActions;
+});
+
+// Clean up resources on shutdown
+connection.onShutdown(() => {
+  console.log("Shutting down server, cleaning up resources...");
+  publicValFilesCache.dispose();
 });
 
 // Make the text document manager listen on the connection
