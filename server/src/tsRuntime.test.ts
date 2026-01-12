@@ -5,11 +5,9 @@ import fs from "fs";
 
 describe("tsRuntime", () => {
   test("should compile and execute TypeScript in memory", async () => {
-    const fakeRoot = "/users/user/project";
-    const { files, directories } = readFakeFiles(
-      path.join(__dirname, "../__fixtures__/smoke"),
-      fakeRoot
-    );
+    // Use the actual fixture directory so it can access real node_modules
+    const fixtureRoot = path.join(__dirname, "../__fixtures__/smoke");
+    const { files, directories } = readFakeFiles(fixtureRoot, fixtureRoot);
     const fakeHost = {
       readDirectory: (path: string) => directories.get(path) || [],
       fileExists: (path: string) => files[path] !== undefined,
@@ -89,7 +87,7 @@ describe("tsRuntime", () => {
         },
       })));
       `,
-      path.join(fakeRoot, "<system>.ts")
+      path.join(fixtureRoot, "<system>.ts")
     );
 
     // The module exports a Promise as default, so await it
