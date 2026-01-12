@@ -48,7 +48,7 @@ import {
 import { isFileInValModulesAST } from "./isFileInValModulesAST";
 import { detectCompletionContext, isValFile } from "./completionContext";
 import { CompletionProviderRegistry } from "./completionProviders";
-import { ValService } from "./types";
+import { ValService } from "./ValService";
 import { PublicValFilesCache } from "./publicValFilesCache";
 
 // Create a connection for the server, using Node's IPC as a transport.

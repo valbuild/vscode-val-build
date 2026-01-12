@@ -4,7 +4,7 @@ import ts from "typescript";
 import { CompletionItemKind } from "vscode-languageserver/node";
 import { ImagePathCompletionProvider } from "./completionProviders";
 import { CompletionContext } from "./completionContext";
-import { ValService } from "./types";
+import { ValService } from "./ValService";
 import { PublicValFilesCache } from "./publicValFilesCache";
 
 describe("ImagePathCompletionProvider", () => {

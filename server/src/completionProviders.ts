@@ -6,7 +6,7 @@ import {
   Position,
 } from "vscode-languageserver/node";
 import { CompletionContext } from "./completionContext";
-import { ValService } from "./types";
+import { ValService } from "./ValService";
 import ts from "typescript";
 import {
   Internal,

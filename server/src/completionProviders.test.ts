@@ -6,7 +6,7 @@ import {
   CompletionProviderRegistry,
 } from "./completionProviders";
 import { CompletionContext } from "./completionContext";
-import { ValService } from "./types";
+import { ValService } from "./ValService";
 import { ValModuleResult } from "./valModules";
 import { PublicValFilesCache } from "./publicValFilesCache";
 import ts from "typescript";

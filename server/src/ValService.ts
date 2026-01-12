@@ -7,9 +7,6 @@ import {
 } from "@valbuild/core";
 import { ValModuleResult } from "./valModules";
 
-/**
- * Simplified service interface - independent of @valbuild/server Service
- */
 export interface ValService {
   read: (
     moduleFilePath: ModuleFilePath,
