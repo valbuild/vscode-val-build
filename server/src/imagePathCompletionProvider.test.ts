@@ -249,6 +249,16 @@ export default c.define("/test.val.ts", s.image(), c.image(""));
         "Label should start with /public/val/"
       );
 
+      // Check that items have data field for resolve
+      assert.ok(firstItem.data, "Should have data field");
+      assert.strictEqual(
+        firstItem.data.type,
+        "image",
+        "Data type should be image"
+      );
+      assert.ok(firstItem.data.filePath, "Should have filePath in data");
+      assert.ok(firstItem.data.valRoot, "Should have valRoot in data");
+
       cache.dispose();
     });
 
@@ -296,6 +306,93 @@ export default c.define("/test.val.ts", s.image(), c.image(""));
       );
 
       assert.strictEqual(items.length, 0, "Should return empty array");
+
+      cache.dispose();
+    });
+
+    it("should detect and store second argument range when metadata exists", async () => {
+      const cache = new PublicValFilesCache();
+      await cache.initialize(fixtureRoot);
+
+      const provider = new ImagePathCompletionProvider(cache);
+      const service = createMockService();
+
+      // Code with existing metadata
+      const code = `
+import { c, s } from "@valbuild/core";
+export default c.define("/test.val.ts", s.image(), c.image("", { width: 100, height: 100 }));
+      `;
+      const sourceFile = ts.createSourceFile(
+        "test.val.ts",
+        code,
+        ts.ScriptTarget.Latest,
+        true
+      );
+
+      // Find the string node and call expression
+      let stringNode: ts.StringLiteral | undefined;
+      let callExpression: ts.CallExpression | undefined;
+      function findNodes(node: ts.Node) {
+        if (
+          ts.isCallExpression(node) &&
+          ts.isPropertyAccessExpression(node.expression) &&
+          node.expression.name.text === "image"
+        ) {
+          callExpression = node;
+          if (
+            node.arguments[0] &&
+            ts.isStringLiteral(node.arguments[0]) &&
+            node.arguments[0].text === ""
+          ) {
+            stringNode = node.arguments[0];
+          }
+        }
+        ts.forEachChild(node, findNodes);
+      }
+      findNodes(sourceFile);
+
+      assert.ok(stringNode, "Should find string node");
+      assert.ok(callExpression, "Should find call expression");
+      assert.ok(
+        callExpression!.arguments.length > 1,
+        "Should have second argument"
+      );
+
+      const context: CompletionContext = {
+        type: "c.image",
+        position: { line: 2, character: 60 },
+        partialText: "",
+        stringNode: stringNode,
+        callExpression: callExpression,
+        hasSecondArgument: true,
+      };
+
+      const items = await provider.provideCompletionItems(
+        context,
+        service,
+        fixtureRoot,
+        sourceFile
+      );
+
+      assert.ok(items.length > 0, "Should return items");
+      const firstItem = items[0];
+      assert.strictEqual(
+        firstItem.data.hasSecondArgument,
+        true,
+        "Should mark hasSecondArgument as true"
+      );
+      assert.ok(
+        firstItem.data.secondArgumentRange,
+        "Should have secondArgumentRange"
+      );
+      assert.ok(
+        firstItem.data.secondArgumentRange.start,
+        "Should have start position"
+      );
+      assert.ok(
+        firstItem.data.secondArgumentRange.end,
+        "Should have end position"
+      );
 
       cache.dispose();
     });

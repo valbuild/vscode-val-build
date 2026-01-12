@@ -236,6 +236,16 @@ export default c.define("/test.val.ts", s.file(), c.file(""));
         "Label should start with /public/val/"
       );
 
+      // Check that items have data field for resolve
+      assert.ok(firstItem.data, "Should have data field");
+      assert.strictEqual(
+        firstItem.data.type,
+        "file",
+        "Data type should be file"
+      );
+      assert.ok(firstItem.data.filePath, "Should have filePath in data");
+      assert.ok(firstItem.data.valRoot, "Should have valRoot in data");
+
       cache.dispose();
     });
 

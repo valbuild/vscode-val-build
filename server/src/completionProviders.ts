@@ -633,6 +633,7 @@ export class ImagePathCompletionProvider implements CompletionProvider {
       ".gif",
       ".svg",
       ".webp",
+      ".avif",
       ".ico",
       ".bmp",
     ];
@@ -650,6 +651,12 @@ export class ImagePathCompletionProvider implements CompletionProvider {
         label: file,
         kind: CompletionItemKind.File,
         detail: "Image file from /public/val",
+        data: {
+          type: "image",
+          filePath: file,
+          valRoot: valRoot,
+          hasSecondArgument: context.hasSecondArgument || false,
+        },
       };
 
       // Add textEdit to replace the entire string if we have the string node
@@ -668,6 +675,23 @@ export class ImagePathCompletionProvider implements CompletionProvider {
           ),
           file
         );
+      }
+
+      // If there's a second argument (metadata), store its range for deletion
+      if (context.hasSecondArgument && context.callExpression && sourceFile) {
+        const secondArg = context.callExpression.arguments[1];
+        if (secondArg) {
+          const start = sourceFile.getLineAndCharacterOfPosition(
+            secondArg.getStart(sourceFile)
+          );
+          const end = sourceFile.getLineAndCharacterOfPosition(
+            secondArg.getEnd()
+          );
+          item.data.secondArgumentRange = {
+            start,
+            end,
+          };
+        }
       }
 
       return item;
@@ -709,6 +733,12 @@ export class FilePathCompletionProvider implements CompletionProvider {
         label: file,
         kind: CompletionItemKind.File,
         detail: "File from /public/val",
+        data: {
+          type: "file",
+          filePath: file,
+          valRoot: valRoot,
+          hasSecondArgument: context.hasSecondArgument || false,
+        },
       };
 
       // Add textEdit to replace the entire string if we have the string node
@@ -727,6 +757,23 @@ export class FilePathCompletionProvider implements CompletionProvider {
           ),
           file
         );
+      }
+
+      // If there's a second argument (metadata), store its range for deletion
+      if (context.hasSecondArgument && context.callExpression && sourceFile) {
+        const secondArg = context.callExpression.arguments[1];
+        if (secondArg) {
+          const start = sourceFile.getLineAndCharacterOfPosition(
+            secondArg.getStart(sourceFile)
+          );
+          const end = sourceFile.getLineAndCharacterOfPosition(
+            secondArg.getEnd()
+          );
+          item.data.secondArgumentRange = {
+            start,
+            end,
+          };
+        }
       }
 
       return item;

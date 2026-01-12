@@ -16,6 +16,10 @@ export interface CompletionContext {
   partialText?: string;
   // For unknown-string: the module path to get schema info
   modulePath?: string;
+  // For c.image/c.file: the call expression node
+  callExpression?: ts.CallExpression;
+  // For c.image/c.file: whether a second argument (metadata) already exists
+  hasSecondArgument?: boolean;
 }
 
 /**
@@ -117,8 +121,12 @@ export function detectCompletionContext(
                   }
                 } else if (method.text === "image" && argIndex === 0) {
                   context.type = "c.image";
+                  context.callExpression = parent;
+                  context.hasSecondArgument = args.length > 1;
                 } else if (method.text === "file" && argIndex === 0) {
                   context.type = "c.file";
+                  context.callExpression = parent;
+                  context.hasSecondArgument = args.length > 1;
                 }
               }
             }

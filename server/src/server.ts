@@ -13,6 +13,7 @@ import {
   InitializeResult,
   CodeAction,
   CodeActionKind,
+  TextEdit,
 } from "vscode-languageserver/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import {
@@ -1254,16 +1255,131 @@ connection.onCompletion(
 
 // This handler resolves additional information for the item selected in
 // the completion list.
-connection.onCompletionResolve((item: CompletionItem): CompletionItem => {
-  if (item.data === 1) {
-    item.detail = "TypeScript details";
-    item.documentation = "TypeScript documentation";
-  } else if (item.data === 2) {
-    item.detail = "JavaScript details";
-    item.documentation = "JavaScript documentation";
+connection.onCompletionResolve(
+  async (item: CompletionItem): Promise<CompletionItem> => {
+    // Check if this is an image or file completion item
+    if (
+      item.data &&
+      typeof item.data === "object" &&
+      (item.data.type === "image" || item.data.type === "file")
+    ) {
+      const { type, filePath, valRoot } = item.data;
+
+      try {
+        // Construct absolute file path
+        const absoluteFilePath = path.join(valRoot, filePath);
+
+        // Get metadata based on type
+        let metadata: Record<string, string | number> = {};
+        if (type === "image") {
+          const { getImageMetadata } = await import("./metadataUtils");
+          const imageMetadata = getImageMetadata(absoluteFilePath);
+          if (imageMetadata) {
+            metadata = imageMetadata as unknown as Record<
+              string,
+              string | number
+            >;
+          }
+        } else if (type === "file") {
+          const { getFileMetadata } = await import("./metadataUtils");
+          const fileMetadata = getFileMetadata(absoluteFilePath);
+          if (fileMetadata) {
+            metadata = fileMetadata as unknown as Record<
+              string,
+              string | number
+            >;
+          }
+        }
+
+        if (metadata && Object.keys(metadata).length > 0) {
+          // Generate metadata object as TypeScript AST
+          const metadataProperties = Object.entries(metadata).map(
+            ([key, value]) =>
+              ts.factory.createPropertyAssignment(
+                ts.factory.createIdentifier(key),
+                typeof value === "number"
+                  ? ts.factory.createNumericLiteral(value)
+                  : ts.factory.createStringLiteral(value)
+              )
+          );
+
+          const metadataObject = ts.factory.createObjectLiteralExpression(
+            metadataProperties,
+            true // multiline
+          );
+
+          // Print the metadata object to text
+          const printer = ts.createPrinter({
+            newLine: ts.NewLineKind.LineFeed,
+          });
+          const sourceFile = ts.createSourceFile(
+            "temp.ts",
+            "",
+            ts.ScriptTarget.Latest,
+            false,
+            ts.ScriptKind.TS
+          );
+          const metadataText = printer.printNode(
+            ts.EmitHint.Unspecified,
+            metadataObject,
+            sourceFile
+          );
+
+          // Add additionalTextEdits to insert metadata after the file path
+          // The textEdit from the provider already handles replacing the file path
+          // We need to add the metadata as the second argument
+          if (item.textEdit && "range" in item.textEdit) {
+            const range = item.textEdit.range;
+            const edits = [];
+
+            // If there's an existing second argument, we need to remove it first
+            if (item.data.hasSecondArgument && item.data.secondArgumentRange) {
+              const secondArgRange = item.data.secondArgumentRange;
+              // Delete from the comma before the second argument to the end of the second argument
+              // We need to go back one character from the start to include the comma and any whitespace
+              edits.push(
+                TextEdit.del({
+                  start: {
+                    line: range.end.line,
+                    character: range.end.character + 1, // +1 to be after the closing quote (at comma)
+                  },
+                  end: {
+                    line: secondArgRange.end.line,
+                    character: secondArgRange.end.character,
+                  },
+                })
+              );
+            }
+
+            // Insert the new metadata after the closing quote of the file path
+            edits.push(
+              TextEdit.insert(
+                {
+                  line: range.end.line,
+                  character: range.end.character + 1, // +1 to be after the closing quote
+                },
+                `, ${metadataText}`
+              )
+            );
+
+            item.additionalTextEdits = edits;
+
+            console.log(
+              `[onCompletionResolve] ${
+                item.data.hasSecondArgument ? "Replaced" : "Added"
+              } metadata for ${type}: ${metadataText}`
+            );
+          }
+        }
+      } catch (error) {
+        console.error(`Error resolving metadata for ${type}:`, error);
+        // Return item without metadata on error
+      }
+    }
+
+    return item;
   }
-  return item;
-});
+);
 
 // Code action handler for automatic fixes
 connection.onCodeAction((params) => {
