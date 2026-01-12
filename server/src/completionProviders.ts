@@ -677,7 +677,7 @@ export class ImagePathCompletionProvider implements CompletionProvider {
         );
       }
 
-      // If there's a second argument (metadata), store its range for deletion
+      // If there's a second argument (metadata), store its range and text for merging
       if (context.hasSecondArgument && context.callExpression && sourceFile) {
         const secondArg = context.callExpression.arguments[1];
         if (secondArg) {
@@ -691,6 +691,8 @@ export class ImagePathCompletionProvider implements CompletionProvider {
             start,
             end,
           };
+          // Store the text of the existing metadata for merging
+          item.data.existingMetadataText = secondArg.getText(sourceFile);
         }
       }
 
@@ -759,7 +761,7 @@ export class FilePathCompletionProvider implements CompletionProvider {
         );
       }
 
-      // If there's a second argument (metadata), store its range for deletion
+      // If there's a second argument (metadata), store its range and text for merging
       if (context.hasSecondArgument && context.callExpression && sourceFile) {
         const secondArg = context.callExpression.arguments[1];
         if (secondArg) {
@@ -773,6 +775,8 @@ export class FilePathCompletionProvider implements CompletionProvider {
             start,
             end,
           };
+          // Store the text of the existing metadata for merging
+          item.data.existingMetadataText = secondArg.getText(sourceFile);
         }
       }
 

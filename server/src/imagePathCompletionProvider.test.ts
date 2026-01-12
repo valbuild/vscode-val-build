@@ -397,6 +397,85 @@ export default c.define("/test.val.ts", s.image(), c.image("", { width: 100, hei
       cache.dispose();
     });
 
+    it("should store existing metadata text for merging custom properties", async () => {
+      const cache = new PublicValFilesCache();
+      await cache.initialize(fixtureRoot);
+
+      const provider = new ImagePathCompletionProvider(cache);
+      const service = createMockService();
+
+      // Code with existing metadata including custom property
+      const code = `
+import { c, s } from "@valbuild/core";
+export default c.define("/test.val.ts", s.image(), c.image("", { width: 100, height: 100, mimeType: "image/png", alt: "My custom alt text", customProp: "custom value" }));
+      `;
+      const sourceFile = ts.createSourceFile(
+        "test.val.ts",
+        code,
+        ts.ScriptTarget.Latest,
+        true
+      );
+
+      // Find the string node and call expression
+      let stringNode: ts.StringLiteral | undefined;
+      let callExpression: ts.CallExpression | undefined;
+      function findNodes(node: ts.Node) {
+        if (
+          ts.isCallExpression(node) &&
+          ts.isPropertyAccessExpression(node.expression) &&
+          node.expression.name.text === "image"
+        ) {
+          callExpression = node;
+          if (
+            node.arguments[0] &&
+            ts.isStringLiteral(node.arguments[0]) &&
+            node.arguments[0].text === ""
+          ) {
+            stringNode = node.arguments[0];
+          }
+        }
+        ts.forEachChild(node, findNodes);
+      }
+      findNodes(sourceFile);
+
+      assert.ok(stringNode, "Should find string node");
+      assert.ok(callExpression, "Should find call expression");
+
+      const context: CompletionContext = {
+        type: "c.image",
+        position: { line: 2, character: 60 },
+        partialText: "",
+        stringNode: stringNode,
+        callExpression: callExpression,
+        hasSecondArgument: true,
+      };
+
+      const items = await provider.provideCompletionItems(
+        context,
+        service,
+        fixtureRoot,
+        sourceFile
+      );
+
+      assert.ok(items.length > 0, "Should return items");
+      const firstItem = items[0];
+      assert.ok(
+        firstItem.data.existingMetadataText,
+        "Should have existingMetadataText"
+      );
+      // Verify the metadata text includes custom properties
+      assert.ok(
+        firstItem.data.existingMetadataText.includes("alt"),
+        "Should include alt property"
+      );
+      assert.ok(
+        firstItem.data.existingMetadataText.includes("customProp"),
+        "Should include customProp property"
+      );
+
+      cache.dispose();
+    });
+
     it("should handle context without stringNode", async () => {
       const cache = new PublicValFilesCache();
       await cache.initialize(fixtureRoot);
