@@ -18,6 +18,7 @@ import {
   filterRoutesByPatterns,
   SerializedRegExpPattern,
 } from "./routeValidation";
+import { PublicValFilesCache } from "./publicValFilesCache";
 
 /**
  * Get sourcePath from a keyOf schema
@@ -600,10 +601,15 @@ export class KeyOfCompletionProvider implements CompletionProvider {
 
 /**
  * File path completion provider for c.image()
- * Provides autocomplete for file paths in c.image() first argument
+ * Provides autocomplete for image file paths in c.image() first argument
  */
 export class ImagePathCompletionProvider implements CompletionProvider {
   contextType: CompletionContext["type"] = "c.image";
+  private cache: PublicValFilesCache;
+
+  constructor(cache: PublicValFilesCache) {
+    this.cache = cache;
+  }
 
   async provideCompletionItems(
     context: CompletionContext,
@@ -611,10 +617,63 @@ export class ImagePathCompletionProvider implements CompletionProvider {
     valRoot: string,
     sourceFile?: ts.SourceFile
   ): Promise<CompletionItem[]> {
-    // TODO: Implement image path completion
-    // This could scan the public directory or configured asset directories
-    // and provide file paths as completion items
-    return [];
+    console.log("[ImagePathCompletionProvider] Starting completion");
+
+    // Get all files from /public/val directory
+    const files = this.cache.getFiles(valRoot);
+    console.log(
+      `[ImagePathCompletionProvider] Found ${files.length} files in cache`
+    );
+
+    // Filter to image files only (common image extensions)
+    const imageExtensions = [
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".gif",
+      ".svg",
+      ".webp",
+      ".ico",
+      ".bmp",
+    ];
+    const imageFiles = files.filter((file) =>
+      imageExtensions.some((ext) => file.toLowerCase().endsWith(ext))
+    );
+
+    console.log(
+      `[ImagePathCompletionProvider] Found ${imageFiles.length} image files`
+    );
+
+    // Create completion items
+    const items: CompletionItem[] = imageFiles.map((file) => {
+      const item: CompletionItem = {
+        label: file,
+        kind: CompletionItemKind.File,
+        detail: "Image file from /public/val",
+      };
+
+      // Add textEdit to replace the entire string if we have the string node
+      if (context.stringNode && sourceFile) {
+        const start = sourceFile.getLineAndCharacterOfPosition(
+          context.stringNode.getStart() + 1
+        ); // +1 to skip opening quote
+        const end = sourceFile.getLineAndCharacterOfPosition(
+          context.stringNode.getEnd() - 1
+        ); // -1 to skip closing quote
+
+        item.textEdit = TextEdit.replace(
+          Range.create(
+            Position.create(start.line, start.character),
+            Position.create(end.line, end.character)
+          ),
+          file
+        );
+      }
+
+      return item;
+    });
+
+    return items;
   }
 }
 
@@ -624,6 +683,11 @@ export class ImagePathCompletionProvider implements CompletionProvider {
  */
 export class FilePathCompletionProvider implements CompletionProvider {
   contextType: CompletionContext["type"] = "c.file";
+  private cache: PublicValFilesCache;
+
+  constructor(cache: PublicValFilesCache) {
+    this.cache = cache;
+  }
 
   async provideCompletionItems(
     context: CompletionContext,
@@ -631,9 +695,44 @@ export class FilePathCompletionProvider implements CompletionProvider {
     valRoot: string,
     sourceFile?: ts.SourceFile
   ): Promise<CompletionItem[]> {
-    // TODO: Implement file path completion
-    // Similar to image path completion
-    return [];
+    console.log("[FilePathCompletionProvider] Starting completion");
+
+    // Get all files from /public/val directory
+    const files = this.cache.getFiles(valRoot);
+    console.log(
+      `[FilePathCompletionProvider] Found ${files.length} files in cache`
+    );
+
+    // Create completion items for all files
+    const items: CompletionItem[] = files.map((file) => {
+      const item: CompletionItem = {
+        label: file,
+        kind: CompletionItemKind.File,
+        detail: "File from /public/val",
+      };
+
+      // Add textEdit to replace the entire string if we have the string node
+      if (context.stringNode && sourceFile) {
+        const start = sourceFile.getLineAndCharacterOfPosition(
+          context.stringNode.getStart() + 1
+        ); // +1 to skip opening quote
+        const end = sourceFile.getLineAndCharacterOfPosition(
+          context.stringNode.getEnd() - 1
+        ); // -1 to skip closing quote
+
+        item.textEdit = TextEdit.replace(
+          Range.create(
+            Position.create(start.line, start.character),
+            Position.create(end.line, end.character)
+          ),
+          file
+        );
+      }
+
+      return item;
+    });
+
+    return items;
   }
 }
 
@@ -643,14 +742,14 @@ export class FilePathCompletionProvider implements CompletionProvider {
 export class CompletionProviderRegistry {
   private providers: Map<CompletionContext["type"], CompletionProvider[]>;
 
-  constructor() {
+  constructor(cache: PublicValFilesCache) {
     this.providers = new Map();
 
     // Register default providers
     this.register(new RouteCompletionProvider());
     this.register(new KeyOfCompletionProvider());
-    this.register(new ImagePathCompletionProvider());
-    this.register(new FilePathCompletionProvider());
+    this.register(new ImagePathCompletionProvider(cache));
+    this.register(new FilePathCompletionProvider(cache));
   }
 
   /**

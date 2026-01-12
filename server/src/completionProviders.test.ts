@@ -8,7 +8,16 @@ import {
 import { CompletionContext } from "./completionContext";
 import { ValService } from "./types";
 import { ValModuleResult } from "./valModules";
+import { PublicValFilesCache } from "./publicValFilesCache";
 import ts from "typescript";
+
+// Helper to create a mock cache
+function createMockCache(): PublicValFilesCache {
+  const cache = new PublicValFilesCache();
+  // Mock the getFiles method to return empty array by default
+  cache.getFiles = () => [];
+  return cache;
+}
 
 // Helper to create a mock service
 function createMockService(
@@ -1393,14 +1402,16 @@ export default c.define(
 
   describe("CompletionProviderRegistry", () => {
     it("should register and retrieve providers", () => {
-      const registry = new CompletionProviderRegistry();
+      const cache = createMockCache();
+      const registry = new CompletionProviderRegistry(cache);
 
       // Registry should have default providers
       assert.ok(registry);
     });
 
     it("should return empty array for unknown context type", async () => {
-      const registry = new CompletionProviderRegistry();
+      const cache = createMockCache();
+      const registry = new CompletionProviderRegistry(cache);
 
       const service: ValService = {
         getAllModules: async () => [],
@@ -1500,7 +1511,8 @@ export default c.define(
 
       assert.ok(stringNode, "Should find the string literal");
 
-      const registry = new CompletionProviderRegistry();
+      const cache = createMockCache();
+      const registry = new CompletionProviderRegistry(cache);
 
       const context: CompletionContext = {
         type: "unknown-string",
@@ -1519,6 +1531,230 @@ export default c.define(
 
       assert.strictEqual(items.length, 1);
       assert.strictEqual(items[0].label, "/test");
+    });
+  });
+
+  describe("ImagePathCompletionProvider", () => {
+    it("should provide image file paths from /public/val directory", async () => {
+      // Create a mock cache with some image files
+      const mockCache = createMockCache();
+      mockCache.getFiles = () => [
+        "/public/val/logo.png",
+        "/public/val/icon.svg",
+        "/public/val/banner.jpg",
+        "/public/val/styles.css", // Not an image
+        "/public/val/images/photo.webp",
+      ];
+
+      const registry = new CompletionProviderRegistry(mockCache);
+
+      const code = `
+import { c } from "@valbuild/core";
+export default c.image("");
+      `;
+
+      const sourceFile = ts.createSourceFile(
+        "test.val.ts",
+        code,
+        ts.ScriptTarget.Latest,
+        true
+      );
+
+      // Find the empty string literal
+      let stringNode: ts.StringLiteral | undefined;
+      function findString(node: ts.Node) {
+        if (ts.isStringLiteral(node) && node.text === "") {
+          stringNode = node;
+        }
+        ts.forEachChild(node, findString);
+      }
+      findString(sourceFile);
+
+      assert.ok(stringNode, "Should find the empty string literal");
+
+      const context: CompletionContext = {
+        type: "c.image",
+        position: { line: 2, character: 24 },
+        partialText: "",
+        stringNode: stringNode,
+      };
+
+      const service = createMockService([]);
+
+      const items = await registry.getCompletionItems(
+        context,
+        service,
+        "/test/root",
+        sourceFile
+      );
+
+      // Should only return image files (4 images, not the CSS file)
+      assert.strictEqual(items.length, 4);
+
+      // Check that all items are images
+      const labels = items.map((item) => item.label);
+      assert.ok(labels.includes("/public/val/logo.png"));
+      assert.ok(labels.includes("/public/val/icon.svg"));
+      assert.ok(labels.includes("/public/val/banner.jpg"));
+      assert.ok(labels.includes("/public/val/images/photo.webp"));
+      assert.ok(!labels.includes("/public/val/styles.css"));
+
+      // Check that items have textEdit
+      assert.ok(items[0].textEdit);
+    });
+
+    it("should return empty array when no image files exist", async () => {
+      const mockCache = createMockCache();
+      mockCache.getFiles = () => ["/public/val/document.pdf"];
+
+      const registry = new CompletionProviderRegistry(mockCache);
+
+      const code = `c.image("")`;
+      const sourceFile = ts.createSourceFile(
+        "test.val.ts",
+        code,
+        ts.ScriptTarget.Latest,
+        true
+      );
+
+      let stringNode: ts.StringLiteral | undefined;
+      function findString(node: ts.Node) {
+        if (ts.isStringLiteral(node)) {
+          stringNode = node;
+        }
+        ts.forEachChild(node, findString);
+      }
+      findString(sourceFile);
+
+      const context: CompletionContext = {
+        type: "c.image",
+        position: { line: 0, character: 9 },
+        partialText: "",
+        stringNode: stringNode,
+      };
+
+      const service = createMockService([]);
+
+      const items = await registry.getCompletionItems(
+        context,
+        service,
+        "/test/root",
+        sourceFile
+      );
+
+      assert.strictEqual(items.length, 0);
+    });
+  });
+
+  describe("FilePathCompletionProvider", () => {
+    it("should provide all file paths from /public/val directory", async () => {
+      // Create a mock cache with various files
+      const mockCache = createMockCache();
+      mockCache.getFiles = () => [
+        "/public/val/document.pdf",
+        "/public/val/data.json",
+        "/public/val/logo.png",
+        "/public/val/docs/manual.pdf",
+        "/public/val/scripts/app.js",
+      ];
+
+      const registry = new CompletionProviderRegistry(mockCache);
+
+      const code = `
+import { c } from "@valbuild/core";
+export default c.file("");
+      `;
+
+      const sourceFile = ts.createSourceFile(
+        "test.val.ts",
+        code,
+        ts.ScriptTarget.Latest,
+        true
+      );
+
+      // Find the empty string literal
+      let stringNode: ts.StringLiteral | undefined;
+      function findString(node: ts.Node) {
+        if (ts.isStringLiteral(node) && node.text === "") {
+          stringNode = node;
+        }
+        ts.forEachChild(node, findString);
+      }
+      findString(sourceFile);
+
+      assert.ok(stringNode, "Should find the empty string literal");
+
+      const context: CompletionContext = {
+        type: "c.file",
+        position: { line: 2, character: 23 },
+        partialText: "",
+        stringNode: stringNode,
+      };
+
+      const service = createMockService([]);
+
+      const items = await registry.getCompletionItems(
+        context,
+        service,
+        "/test/root",
+        sourceFile
+      );
+
+      // Should return all 5 files
+      assert.strictEqual(items.length, 5);
+
+      // Check that all items are present
+      const labels = items.map((item) => item.label);
+      assert.ok(labels.includes("/public/val/document.pdf"));
+      assert.ok(labels.includes("/public/val/data.json"));
+      assert.ok(labels.includes("/public/val/logo.png"));
+      assert.ok(labels.includes("/public/val/docs/manual.pdf"));
+      assert.ok(labels.includes("/public/val/scripts/app.js"));
+
+      // Check that items have textEdit
+      assert.ok(items[0].textEdit);
+    });
+
+    it("should return empty array when no files exist", async () => {
+      const mockCache = createMockCache();
+      mockCache.getFiles = () => [];
+
+      const registry = new CompletionProviderRegistry(mockCache);
+
+      const code = `c.file("")`;
+      const sourceFile = ts.createSourceFile(
+        "test.val.ts",
+        code,
+        ts.ScriptTarget.Latest,
+        true
+      );
+
+      let stringNode: ts.StringLiteral | undefined;
+      function findString(node: ts.Node) {
+        if (ts.isStringLiteral(node)) {
+          stringNode = node;
+        }
+        ts.forEachChild(node, findString);
+      }
+      findString(sourceFile);
+
+      const context: CompletionContext = {
+        type: "c.file",
+        position: { line: 0, character: 8 },
+        partialText: "",
+        stringNode: stringNode,
+      };
+
+      const service = createMockService([]);
+
+      const items = await registry.getCompletionItems(
+        context,
+        service,
+        "/test/root",
+        sourceFile
+      );
+
+      assert.strictEqual(items.length, 0);
     });
   });
 });

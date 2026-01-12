@@ -49,6 +49,7 @@ import { isFileInValModulesAST } from "./isFileInValModulesAST";
 import { detectCompletionContext, isValFile } from "./completionContext";
 import { CompletionProviderRegistry } from "./completionProviders";
 import { ValService } from "./types";
+import { PublicValFilesCache } from "./publicValFilesCache";
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -75,8 +76,12 @@ let runtimesByValRoot: {
 let moduleIndexMappingsByValRoot: {
   [valRoot: string]: Map<string, number>; // path -> index
 } = {};
+// Initialize public val files cache
+const publicValFilesCache = new PublicValFilesCache();
 // Initialize completion provider registry
-const completionProviderRegistry = new CompletionProviderRegistry();
+const completionProviderRegistry = new CompletionProviderRegistry(
+  publicValFilesCache
+);
 
 connection.onInitialize(async (params: InitializeParams) => {
   const capabilities = params.capabilities;
@@ -144,6 +149,14 @@ connection.onInitialize(async (params: InitializeParams) => {
         })
     )
   );
+
+  // Initialize public val files cache for each Val root
+  for (const valRoot of valRoots.filter(
+    (valRoot) => !valRoot.includes("node_modules")
+  )) {
+    await publicValFilesCache.initialize(valRoot);
+    console.log(`Initialized public val files cache for root: ${valRoot}`);
+  }
 
   const result: InitializeResult = {
     capabilities: {
@@ -1371,6 +1384,12 @@ connection.onCodeAction((params) => {
   }
 
   return codeActions;
+});
+
+// Clean up resources on shutdown
+connection.onShutdown(() => {
+  console.log("Shutting down server, cleaning up resources...");
+  publicValFilesCache.dispose();
 });
 
 // Make the text document manager listen on the connection
