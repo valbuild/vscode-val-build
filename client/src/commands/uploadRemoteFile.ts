@@ -16,19 +16,6 @@ import { VAL_BUILD_URL } from "../envConstants";
 export const uploadRemoteFileCommand =
   (statusBarItem: vscode.StatusBarItem) => async (args) => {
     console.log("Upload remote file command called with arguments:", args);
-    let coreVersion = "unknown";
-    let Internal: Awaited<typeof import("@valbuild/core")>["Internal"] =
-      undefined;
-    try {
-      const valbuildCore = await import("@valbuild/core");
-      coreVersion = valbuildCore.Internal.VERSION.core;
-      Internal = valbuildCore.Internal;
-    } catch (err) {
-      vscode.window.showErrorMessage(
-        "Val Build core not found. Please install the Val Build core package."
-      );
-      return;
-    }
     if (!args) {
       vscode.window.showErrorMessage(
         "No arguments provided to uploadRemoteFileCommand"
@@ -41,6 +28,24 @@ export const uploadRemoteFileCommand =
       if (!projectDirOfDocumentUri) {
         vscode.window.showErrorMessage(
           "Could not find project root. This file does not seem to be in a Val project (no package.json file found in parent directories)."
+        );
+        return;
+      }
+      // Load @valbuild/core from the user's project node_modules
+      let coreVersion = "unknown";
+      let Internal: Awaited<typeof import("@valbuild/core")>["Internal"] =
+        undefined;
+      try {
+        const corePath = require.resolve("@valbuild/core", {
+          paths: [projectDirOfDocumentUri],
+        });
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const valbuildCore = require(corePath);
+        coreVersion = valbuildCore.Internal.VERSION.core;
+        Internal = valbuildCore.Internal;
+      } catch (err) {
+        vscode.window.showErrorMessage(
+          "Val Build core not found in your project. Please install @valbuild/core in your project."
         );
         return;
       }

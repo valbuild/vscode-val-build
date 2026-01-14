@@ -15,17 +15,6 @@ import * as https from "https";
 import * as http from "http";
 
 export const downloadRemoteFileCommand = async (args) => {
-  let Internal: Awaited<typeof import("@valbuild/core")>["Internal"] =
-    undefined;
-  try {
-    const valbuildCore = await import("@valbuild/core");
-    Internal = valbuildCore.Internal;
-  } catch (err) {
-    vscode.window.showErrorMessage(
-      "Val Build core not found. Please install the Val Build core package."
-    );
-    return;
-  }
   const { uri, text, range, code } = args;
 
   try {
@@ -33,6 +22,22 @@ export const downloadRemoteFileCommand = async (args) => {
     if (!projectDirOfDocumentUri) {
       vscode.window.showErrorMessage(
         "Could not find project root. This file does not seem to be in a Val project (no package.json file found in parent directories)."
+      );
+      return;
+    }
+    // Load @valbuild/core from the user's project node_modules
+    let Internal: Awaited<typeof import("@valbuild/core")>["Internal"] =
+      undefined;
+    try {
+      const corePath = require.resolve("@valbuild/core", {
+        paths: [projectDirOfDocumentUri],
+      });
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const valbuildCore = require(corePath);
+      Internal = valbuildCore.Internal;
+    } catch (err) {
+      vscode.window.showErrorMessage(
+        "Val Build core not found in your project. Please install @valbuild/core in your project."
       );
       return;
     }
