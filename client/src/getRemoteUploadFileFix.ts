@@ -3,7 +3,7 @@ import { type Internal as InternalCoreFn } from "@valbuild/core";
 import { VAL_REMOTE_HOST } from "./envConstants";
 
 export function getRemoteUploadFileFix(
-  Internal: typeof InternalCoreFn,
+  Internal: unknown,
   bucket: string,
   coreVersion: string,
   validationHash: string,
@@ -43,16 +43,68 @@ export function getRemoteUploadFileFix(
                 getMetadata(foundFilename);
 
               fileBuffer = getBuffer(foundFilename);
-              fileHash = Internal.remote.getFileHash(fileBuffer);
+              if (
+                typeof Internal === "object" &&
+                Internal !== null &&
+                "remote" in Internal &&
+                typeof Internal.remote === "object" &&
+                Internal.remote !== null &&
+                "getFileHash" in Internal.remote &&
+                typeof Internal.remote.getFileHash === "function"
+              ) {
+                try {
+                  fileHash = Internal.remote.getFileHash(fileBuffer);
+                } catch (err) {
+                  throw new Error(
+                    "Failed to get file hash: " +
+                      err +
+                      " for file buffer: " +
+                      fileBuffer +
+                      " in source file: " +
+                      sourceFile.fileName +
+                      ". This VS Code extension might not be compatible with the version of Val Build that is used in this project."
+                  );
+                }
+              } else {
+                throw new Error(
+                  "Internal.remote.getFileHash is not a function"
+                );
+              }
               filePath = foundFilename.slice(1) as `public/val/${string}`;
-              ref = Internal.remote.createRemoteRef(VAL_REMOTE_HOST, {
-                bucket,
-                coreVersion,
-                fileHash,
-                filePath,
-                validationHash,
-                publicProjectId,
-              });
+              if (
+                typeof Internal === "object" &&
+                Internal !== null &&
+                "remote" in Internal &&
+                typeof Internal.remote === "object" &&
+                Internal.remote !== null &&
+                "createRemoteRef" in Internal.remote &&
+                typeof Internal.remote.createRemoteRef === "function"
+              ) {
+                try {
+                  ref = Internal.remote.createRemoteRef(VAL_REMOTE_HOST, {
+                    bucket,
+                    coreVersion,
+                    fileHash,
+                    filePath,
+                    validationHash,
+                    publicProjectId,
+                  });
+                } catch (err) {
+                  throw new Error(
+                    "Failed to create remote ref: " +
+                      err +
+                      " for VAL_REMOTE_HOST: " +
+                      VAL_REMOTE_HOST +
+                      " in source file: " +
+                      sourceFile.fileName +
+                      ". This VS Code extension might not be compatible with the version of Val Build that is used in this project."
+                  );
+                }
+              } else {
+                throw new Error(
+                  "Internal.remote.createRemoteRef is not a function"
+                );
+              }
               const newPropertyAccessExpression =
                 ts.factory.updatePropertyAccessExpression(
                   node.expression,

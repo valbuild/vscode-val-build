@@ -26,8 +26,7 @@ export const downloadRemoteFileCommand = async (args) => {
       return;
     }
     // Load @valbuild/core from the user's project node_modules
-    let Internal: Awaited<typeof import("@valbuild/core")>["Internal"] =
-      undefined;
+    let Internal: unknown = undefined;
     try {
       const corePath = require.resolve("@valbuild/core", {
         paths: [projectDirOfDocumentUri],

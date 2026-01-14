@@ -1,9 +1,8 @@
 import * as ts from "typescript";
-import { type Internal as InternalCoreFn } from "@valbuild/core";
 import { getFileExt } from "./getFileExt";
 
 export function getRemoteDownloadFileFix(
-  Internal: typeof InternalCoreFn,
+  Internal: unknown,
   newType: "image" | "file",
   sourceFile: ts.SourceFile
 ): {
@@ -42,10 +41,37 @@ export function getRemoteDownloadFileFix(
               if (!ts.isObjectLiteralExpression(metadataExpr)) {
                 return;
               }
-              const splitRemoteRefDataRes =
-                Internal.remote.splitRemoteRef(foundRemoteRef);
-              if (splitRemoteRefDataRes.status !== "success") {
-                return;
+              let splitRemoteRefDataRes: {
+                filePath: string;
+                fileHash: string;
+              } | null = null;
+              if (
+                typeof Internal === "object" &&
+                Internal !== null &&
+                "remote" in Internal &&
+                typeof Internal.remote === "object" &&
+                Internal.remote !== null &&
+                "splitRemoteRef" in Internal.remote &&
+                typeof Internal.remote.splitRemoteRef === "function"
+              ) {
+                try {
+                  splitRemoteRefDataRes =
+                    Internal.remote.splitRemoteRef(foundRemoteRef);
+                } catch (err) {
+                  throw new Error(
+                    "Failed to split remote ref: " +
+                      err +
+                      " for remote ref: " +
+                      foundRemoteRef +
+                      " in source file: " +
+                      sourceFile.fileName +
+                      ". This VS Code extension might not be compatible with the version of Val Build that is used in this project."
+                  );
+                }
+              } else {
+                throw new Error(
+                  "Internal.remote.splitRemoteRef is not a function"
+                );
               }
               const { filePath, fileHash } = splitRemoteRefDataRes;
               const fileExt = getFileExt(filePath);

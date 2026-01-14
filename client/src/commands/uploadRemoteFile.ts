@@ -11,7 +11,6 @@ import { getRemoteFileBucket } from "../getRemoteFileBucket";
 import { getProjectSettings } from "../getProjectSettings";
 import { getFileExt } from "../getFileExt";
 import * as fs from "fs";
-import { VAL_BUILD_URL } from "../envConstants";
 
 export const uploadRemoteFileCommand =
   (statusBarItem: vscode.StatusBarItem) => async (args) => {
@@ -33,16 +32,28 @@ export const uploadRemoteFileCommand =
       }
       // Load @valbuild/core from the user's project node_modules
       let coreVersion = "unknown";
-      let Internal: Awaited<typeof import("@valbuild/core")>["Internal"] =
-        undefined;
+      let Internal: unknown = undefined;
       try {
         const corePath = require.resolve("@valbuild/core", {
           paths: [projectDirOfDocumentUri],
         });
         // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const valbuildCore = require(corePath);
-        coreVersion = valbuildCore.Internal.VERSION.core;
-        Internal = valbuildCore.Internal;
+        const valbuildCore = require(corePath) as unknown;
+        if (
+          typeof valbuildCore === "object" &&
+          valbuildCore !== null &&
+          "Internal" in valbuildCore &&
+          typeof valbuildCore.Internal === "object" &&
+          valbuildCore.Internal !== null &&
+          "VERSION" in valbuildCore.Internal &&
+          typeof valbuildCore.Internal.VERSION === "object" &&
+          valbuildCore.Internal.VERSION !== null &&
+          "core" in valbuildCore.Internal.VERSION &&
+          typeof valbuildCore.Internal.VERSION.core === "string"
+        ) {
+          coreVersion = valbuildCore.Internal.VERSION.core;
+          Internal = valbuildCore.Internal;
+        }
       } catch (err) {
         vscode.window.showErrorMessage(
           "Val Build core not found in your project. Please install @valbuild/core in your project."
