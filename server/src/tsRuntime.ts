@@ -234,6 +234,10 @@ ${code}
       jsCodeCache.delete(fileName);
       moduleCache.delete(fileName);
     },
+    clearAllCaches: () => {
+      jsCodeCache.clear();
+      moduleCache.clear();
+    },
   };
 }
 

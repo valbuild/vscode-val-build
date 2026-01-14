@@ -658,22 +658,8 @@ async function validateTextDocumentInternal(
 
     // Invalidate runtime cache for this file
     if (valRoot && runtimesByValRoot[valRoot]) {
-      runtimesByValRoot[valRoot].invalidateFile(fsPath);
-
-      // Also invalidate the system file that runs validation
-      // This ensures validation is re-run with fresh data
-      const valModulesFile = valModulesFilesByValRoot[valRoot];
-      if (valModulesFile) {
-        const valModulesDir = path.dirname(valModulesFile);
-        const systemFile = path.join(valModulesDir, "<system>.ts");
-        runtimesByValRoot[valRoot].invalidateFile(systemFile);
-
-        // Invalidate all system files for index-based validation
-        for (let i = 0; i < 100; i++) {
-          const indexSystemFile = path.join(valModulesDir, `<system-${i}>.ts`);
-          runtimesByValRoot[valRoot].invalidateFile(indexSystemFile);
-        }
-      }
+      // It would be better if we could figure out exactly what has changed, but get
+      runtimesByValRoot[valRoot].clearAllCaches();
 
       // If val.modules file itself changed, clear the index mapping
       if (fsPath.includes("val.modules")) {
