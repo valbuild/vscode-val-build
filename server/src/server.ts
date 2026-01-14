@@ -1083,17 +1083,93 @@ async function validateTextDocumentInternal(
                     }
                     const fileExt = getFileExt(filePath);
                     const metadata = (resolvedSourceAtPath as any).metadata;
-                    const fileHash = Internal.remote.getFileHash(
+
+                    // Load @valbuild/core from the user's project for hash computation
+                    // to ensure consistency with the client extension
+                    let userInternal: unknown;
+                    try {
+                      const corePath = require.resolve("@valbuild/core", {
+                        paths: [valRoot],
+                      });
+                      // eslint-disable-next-line @typescript-eslint/no-var-requires
+                      const userCore = require(corePath) as unknown;
+                      if (
+                        typeof userCore === "object" &&
+                        userCore !== null &&
+                        "Internal" in userCore
+                      ) {
+                        userInternal = userCore.Internal;
+                      } else {
+                        console.error(
+                          "Failed to load @valbuild/core from user's project: Internal export not found. " +
+                            "Make sure @valbuild/core is installed in your project."
+                        );
+                        continue;
+                      }
+                    } catch (err) {
+                      console.error(
+                        "Failed to load @valbuild/core from user's project:",
+                        err
+                      );
+                      continue;
+                    }
+
+                    // Validate userInternal.remote.getFileHash exists
+                    if (
+                      !(
+                        typeof userInternal === "object" &&
+                        userInternal !== null &&
+                        "remote" in userInternal &&
+                        typeof userInternal.remote === "object" &&
+                        userInternal.remote !== null &&
+                        "getFileHash" in userInternal.remote &&
+                        typeof userInternal.remote.getFileHash === "function"
+                      )
+                    ) {
+                      console.error(
+                        "Failed to compute file hash: Internal.remote.getFileHash is not available. " +
+                          "The installed @valbuild/core version may be incompatible with this extension."
+                      );
+                      continue;
+                    }
+
+                    const fileHash = userInternal.remote.getFileHash(
                       fs.readFileSync(
                         path.join(valRoot, ...filePath.split("/"))
                       ) as Buffer
                     );
+
+                    // Validate userInternal.remote.getValidationHash and VERSION.core exist
+                    if (
+                      !(
+                        "getValidationHash" in userInternal.remote &&
+                        typeof userInternal.remote.getValidationHash ===
+                          "function"
+                      )
+                    ) {
+                      console.error(
+                        "Failed to compute validation hash: Internal.remote.getValidationHash is not available. " +
+                          "The installed @valbuild/core version may be incompatible with this extension."
+                      );
+                      continue;
+                    }
+
+                    let coreVersion = "unknown";
+                    if (
+                      "VERSION" in userInternal &&
+                      typeof userInternal.VERSION === "object" &&
+                      userInternal.VERSION !== null &&
+                      "core" in userInternal.VERSION &&
+                      typeof userInternal.VERSION.core === "string"
+                    ) {
+                      coreVersion = userInternal.VERSION.core;
+                    }
+
                     diagnostic.code =
                       uploadRemoteFileFix +
                       ":" +
-                      // TODO: figure out a different way to send the ValidationHash - we need it when creating refs in the client extension which is why we do it like this now...
-                      Internal.remote.getValidationHash(
-                        Internal.VERSION.core || "unknown",
+                      userInternal.remote.getValidationHash(
+                        coreVersion,
                         resolvedSchemaAtPath as
                           | SerializedFileSchema
                           | SerializedImageSchema,
