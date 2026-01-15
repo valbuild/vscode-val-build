@@ -18,7 +18,30 @@ export function getModulePathRange(
   modulePath: string,
   modulePathMap: ModulePathMap
 ) {
-  const segments = modulePath.split(".").map((segment) => JSON.parse(segment)); // TODO: this is not entirely correct, but works for now. We have a function I think that does this so replace this with it
+  // Handle empty or invalid module paths gracefully
+  if (!modulePath || typeof modulePath !== "string") {
+    return undefined;
+  }
+
+  let segments: (string | number)[];
+  try {
+    segments = modulePath.split(".").map((segment) => {
+      // Handle empty segments that can occur from malformed paths
+      if (!segment || segment.trim() === "") {
+        throw new Error("Empty segment");
+      }
+      return JSON.parse(segment);
+    }); // TODO: this is not entirely correct, but works for now. We have a function I think that does this so replace this with it
+  } catch {
+    // Return undefined if module path contains invalid JSON segments
+    // This can happen when there are upstream errors in schema serialization
+    return undefined;
+  }
+
+  if (segments.length === 0) {
+    return undefined;
+  }
+
   let range = modulePathMap[segments[0]];
   for (const pathSegment of segments.slice(1)) {
     if (!range) {

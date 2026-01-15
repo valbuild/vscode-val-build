@@ -161,4 +161,40 @@ export default c.define('/content', schema, {
       }
     );
   });
+
+  test("should handle invalid/malformed module paths gracefully", () => {
+    const text = `import { s, c } from '../val.config';
+
+export const schema = s.object({
+  text: s.string(),
+});
+
+export default c.define('/content', schema, {
+  text: 'hello'
+});
+`;
+    const sourceFile = ts.createSourceFile(
+      "./content.val.ts",
+      text,
+      ts.ScriptTarget.ES2015
+    );
+
+    const modulePathMap = createModulePathMap(sourceFile);
+    assert(!!modulePathMap, "modulePathMap is undefined");
+
+    // These should return undefined instead of throwing
+    assert.strictEqual(getModulePathRange("", modulePathMap), undefined);
+    assert.strictEqual(getModulePathRange("invalid", modulePathMap), undefined);
+    assert.strictEqual(getModulePathRange(".", modulePathMap), undefined);
+    assert.strictEqual(getModulePathRange("..", modulePathMap), undefined);
+    assert.strictEqual(getModulePathRange("foo.bar", modulePathMap), undefined);
+    assert.strictEqual(
+      getModulePathRange(undefined as unknown as string, modulePathMap),
+      undefined
+    );
+    assert.strictEqual(
+      getModulePathRange(null as unknown as string, modulePathMap),
+      undefined
+    );
+  });
 });
