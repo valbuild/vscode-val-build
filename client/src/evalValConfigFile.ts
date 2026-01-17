@@ -10,7 +10,7 @@ export type EvaluatedValConfig = {
 
 export async function evalValConfigFile(
   projectRoot: string,
-  configFileName: string
+  configFileName: string,
 ): Promise<EvaluatedValConfig | null> {
   const valConfigPath = path.join(projectRoot, configFileName);
 
@@ -55,17 +55,17 @@ export async function evalValConfigFile(
   const valConfig = sandbox.module.exports.config;
   if (!valConfig) {
     throw Error(
-      `Val config file at path: '${valConfigPath}' must export a config object. Got: ${valConfig}`
+      `Val config file at path: '${valConfigPath}' must export a config object. Got: ${valConfig}`,
     );
   }
   if (typeof valConfig !== "object") {
     throw Error(
-      `Val config file at path: '${valConfigPath}' must export a config object. Got: ${valConfig}`
+      `Val config file at path: '${valConfigPath}' must export a config object. Got: ${valConfig}`,
     );
   }
   if ("project" in valConfig && typeof valConfig?.project !== "string") {
     throw Error(
-      `Val config file at path: '${valConfigPath}' must export a config object with a 'project' property of type string. Got: ${valConfig.project}`
+      `Val config file at path: '${valConfigPath}' must export a config object with a 'project' property of type string. Got: ${valConfig.project}`,
     );
   }
   console.log("Found val config", valConfig);

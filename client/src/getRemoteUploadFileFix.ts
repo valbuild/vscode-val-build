@@ -10,7 +10,7 @@ export function getRemoteUploadFileFix(
   publicProjectId: string,
   sourceFile: ts.SourceFile,
   getMetadata: (filename: string) => Record<string, string | number>,
-  getBuffer: (filename: string) => Buffer
+  getBuffer: (filename: string) => Buffer,
 ) {
   let newCallExpression: ts.CallExpression;
   let foundExpressionType: "image" | "file" | null = null;
@@ -20,7 +20,7 @@ export function getRemoteUploadFileFix(
   let fileHash: string;
   let filePath: `public/val/${string}` | null = null;
   const transformerFactory: ts.TransformerFactory<ts.SourceFile> = (
-    context
+    context,
   ) => {
     return (sourceFile) => {
       const visitor = (node: ts.Node): ts.Node => {
@@ -62,12 +62,12 @@ export function getRemoteUploadFileFix(
                       fileBuffer +
                       " in source file: " +
                       sourceFile.fileName +
-                      ". This VS Code extension might not be compatible with the version of Val Build that is used in this project."
+                      ". This VS Code extension might not be compatible with the version of Val Build that is used in this project.",
                   );
                 }
               } else {
                 throw new Error(
-                  "Internal.remote.getFileHash is not a function"
+                  "Internal.remote.getFileHash is not a function",
                 );
               }
               filePath = foundFilename.slice(1) as `public/val/${string}`;
@@ -97,19 +97,19 @@ export function getRemoteUploadFileFix(
                       VAL_REMOTE_HOST +
                       " in source file: " +
                       sourceFile.fileName +
-                      ". This VS Code extension might not be compatible with the version of Val Build that is used in this project."
+                      ". This VS Code extension might not be compatible with the version of Val Build that is used in this project.",
                   );
                 }
               } else {
                 throw new Error(
-                  "Internal.remote.createRemoteRef is not a function"
+                  "Internal.remote.createRemoteRef is not a function",
                 );
               }
               const newPropertyAccessExpression =
                 ts.factory.updatePropertyAccessExpression(
                   node.expression,
                   node.expression.expression,
-                  ts.factory.createIdentifier("remote")
+                  ts.factory.createIdentifier("remote"),
                 );
               const prevMetadataExpr = node.arguments[1];
               if (!ts.isObjectLiteralExpression(prevMetadataExpr)) {
@@ -133,7 +133,7 @@ export function getRemoteUploadFileFix(
                     ? value < 0
                       ? ts.factory.createPrefixUnaryExpression(
                           ts.SyntaxKind.MinusToken,
-                          ts.factory.createNumericLiteral(Math.abs(value))
+                          ts.factory.createNumericLiteral(Math.abs(value)),
                         )
                       : ts.factory.createNumericLiteral(value)
                     : ts.factory.createStringLiteral(value);
@@ -142,19 +142,19 @@ export function getRemoteUploadFileFix(
                   key,
                   ts.factory.createPropertyAssignment(
                     ts.factory.createIdentifier(key),
-                    newValue
-                  )
+                    newValue,
+                  ),
                 );
               }
               const metadataExpr = ts.factory.createObjectLiteralExpression(
                 Array.from(prevProps.values()),
-                true
+                true,
               );
               newCallExpression = ts.factory.updateCallExpression(
                 node,
                 newPropertyAccessExpression,
                 undefined,
-                [ts.factory.createStringLiteral(ref), metadataExpr]
+                [ts.factory.createStringLiteral(ref), metadataExpr],
               );
               return newCallExpression;
             }
@@ -172,7 +172,7 @@ export function getRemoteUploadFileFix(
       .printNode(
         ts.EmitHint.Unspecified,
         result.transformed[0],
-        result.transformed[0]
+        result.transformed[0],
       )
       .trim();
     newNodeText =

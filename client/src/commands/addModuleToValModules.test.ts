@@ -113,7 +113,7 @@ export default modules(config, [
 
       const { insertPosition, indentation } = findInsertionPoint(
         valModulesContent,
-        "val.modules.ts"
+        "val.modules.ts",
       );
       expect(insertPosition).not.toBeNull();
 
@@ -122,7 +122,7 @@ export default modules(config, [
       const insertText = generateInsertText(
         relativePath,
         indentation,
-        hasExisting
+        hasExisting,
       );
 
       const result =
@@ -133,12 +133,12 @@ export default modules(config, [
       expect(result).toContain('{ def: () => import("./test1.val") }');
       expect(result).toContain('{ def: () => import("./test2.val") }');
       expect(result).toContain(
-        '{ def: () => import("./components/Button.val") }'
+        '{ def: () => import("./components/Button.val") }',
       );
       expect(
-        result.indexOf('{ def: () => import("./test2.val") }')
+        result.indexOf('{ def: () => import("./test2.val") }'),
       ).toBeLessThan(
-        result.indexOf('{ def: () => import("./components/Button.val") }')
+        result.indexOf('{ def: () => import("./components/Button.val") }'),
       );
     });
   });

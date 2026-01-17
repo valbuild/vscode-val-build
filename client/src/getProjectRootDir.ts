@@ -5,7 +5,7 @@ import * as fs from "fs";
 const cache = new Map<string, string>();
 
 export const getProjectRootDir = (
-  documentUri: vscode.Uri
+  documentUri: vscode.Uri,
 ): string | undefined => {
   if (cache.has(documentUri.fsPath)) {
     return cache.get(documentUri.fsPath);
@@ -31,7 +31,7 @@ export const getProjectRootDir = (
   }
   if (i >= MAX_CYCLES - 1) {
     throw Error(
-      "Reached max cycles while trying to get project root dir from: " + dir
+      "Reached max cycles while trying to get project root dir from: " + dir,
     );
   }
 

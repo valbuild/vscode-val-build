@@ -61,12 +61,12 @@ export default c.define('/content/company/allEmployees.val.ts', schema, {
       getText(input, range),
       ts.ScriptTarget.ES2015,
       true,
-      ts.ScriptKind.TSX
+      ts.ScriptKind.TSX,
     );
     const res = getRemoteDownloadFileFix(Internal, "image", sourceFile);
     assert.strictEqual(
       res.foundRemoteRef,
-      "https://remote.val.build/file/p/12345/b/v01/v/0.0.1/h/abc123/f/1f072448a8aa/p/public/val/fakeImage.webp"
+      "https://remote.val.build/file/p/12345/b/v01/v/0.0.1/h/abc123/f/1f072448a8aa/p/public/val/fakeImage.webp",
     );
     assert.deepStrictEqual(
       res.newNodeText,
@@ -78,14 +78,14 @@ export default c.define('/content/company/allEmployees.val.ts', schema, {
         x: 0.5062893081761006,
         y: 0.4293465501781632,
     },
-}), `
+}), `,
     );
   });
 });
 
 type Range = [
   { line: number; character: number },
-  { line: number; character: number }
+  { line: number; character: number },
 ];
 function getText(input: string, range: Range) {
   const lines = input.split("\n");

@@ -21,7 +21,7 @@ export const downloadRemoteFileCommand = async (args) => {
     const projectDirOfDocumentUri = getProjectRootDir(uri);
     if (!projectDirOfDocumentUri) {
       vscode.window.showErrorMessage(
-        "Could not find project root. This file does not seem to be in a Val project (no package.json file found in parent directories)."
+        "Could not find project root. This file does not seem to be in a Val project (no package.json file found in parent directories).",
       );
       return;
     }
@@ -36,7 +36,7 @@ export const downloadRemoteFileCommand = async (args) => {
       Internal = valbuildCore.Internal;
     } catch (err) {
       vscode.window.showErrorMessage(
-        "Val Build core not found in your project. Please install @valbuild/core in your project."
+        "Val Build core not found in your project. Please install @valbuild/core in your project.",
       );
       return;
     }
@@ -54,7 +54,7 @@ export const downloadRemoteFileCommand = async (args) => {
       text,
       ts.ScriptTarget.ES2015,
       true,
-      ts.ScriptKind.TSX
+      ts.ScriptKind.TSX,
     );
     const fixRes = getRemoteDownloadFileFix(Internal, newType, sourceFile);
     if (!fixRes) {
@@ -64,13 +64,13 @@ export const downloadRemoteFileCommand = async (args) => {
     const { newNodeText, newLocalFilePath, foundRemoteRef } = fixRes;
     if (!newLocalFilePath.startsWith("public")) {
       vscode.window.showErrorMessage(
-        "File path (the part after the '/p' part of the remote URL) must start with /public"
+        "File path (the part after the '/p' part of the remote URL) must start with /public",
       );
       return;
     }
     const absFilePath = path.join(
       projectDirOfDocumentUri,
-      ...newLocalFilePath.split("/")
+      ...newLocalFilePath.split("/"),
     );
     await vscode.window.withProgress(
       {
@@ -85,7 +85,7 @@ export const downloadRemoteFileCommand = async (args) => {
           absFilePath,
           (bytesReceived, totalBytes) => {
             const progressMessage = `Downloading ${path.basename(
-              newLocalFilePath
+              newLocalFilePath,
             )} (${
               totalBytes !== undefined && totalBytes > 0
                 ? `${Math.round((bytesReceived / totalBytes) * 100)}%`
@@ -96,20 +96,20 @@ export const downloadRemoteFileCommand = async (args) => {
                 totalBytes && Math.round((bytesReceived / totalBytes) * 100),
               message: progressMessage,
             });
-          }
+          },
         )
           .then(() => {
             const edit = new vscode.WorkspaceEdit();
             edit.replace(uri, range, newNodeText);
             vscode.workspace.applyEdit(edit);
             vscode.window.showInformationMessage(
-              `Downloaded ${path.basename(newLocalFilePath)}`
+              `Downloaded ${path.basename(newLocalFilePath)}`,
             );
           })
           .catch((err) => {
             vscode.window.showErrorMessage(`Download failed: ${err}`);
           });
-      }
+      },
     );
   } catch (err) {
     vscode.window.showErrorMessage(`Download failed: ${err}`);
@@ -118,13 +118,13 @@ export const downloadRemoteFileCommand = async (args) => {
 
 type ProgressCallback = (
   bytesReceived: number,
-  totalBytes: number | undefined
+  totalBytes: number | undefined,
 ) => void;
 
 export function downloadFile(
   fileUrl: string,
   filePath: string,
-  onProgress?: ProgressCallback
+  onProgress?: ProgressCallback,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const urlObj = new URL(fileUrl);

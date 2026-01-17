@@ -29,7 +29,7 @@ export function activate(context: ExtensionContext) {
   }
   statusBarItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
-    100
+    100,
   );
   statusBarItem.command = "val.login";
   context.subscriptions.push(
@@ -45,21 +45,21 @@ export function activate(context: ExtensionContext) {
       new ValActionProvider(),
       {
         providedCodeActionKinds: ValActionProvider.providedCodeActionKinds,
-      }
+      },
     ),
     vscode.commands.registerCommand(
       "val.uploadRemoteFile",
-      uploadRemoteFileCommand(statusBarItem)
+      uploadRemoteFileCommand(statusBarItem),
     ),
     vscode.commands.registerCommand(
       "val.downloadRemoteFile",
-      downloadRemoteFileCommand
+      downloadRemoteFileCommand,
     ),
     vscode.commands.registerCommand("val.login", loginCommand(statusBarItem)),
     vscode.commands.registerCommand(
       "val.addModuleToValModules",
-      addModuleToValModulesCommand
-    )
+      addModuleToValModulesCommand,
+    ),
   );
   updateStatusBar(statusBarItem, currentProjectDir);
 
@@ -76,12 +76,12 @@ export function activate(context: ExtensionContext) {
       }
     },
     null,
-    context.subscriptions
+    context.subscriptions,
   );
 
   // The server is implemented in node
   const serverModule = context.asAbsolutePath(
-    path.join("server", "out", "server.js")
+    path.join("server", "out", "server.js"),
   );
 
   // If the extension is launched in debug mode then the debug server options are used
@@ -102,7 +102,7 @@ export function activate(context: ExtensionContext) {
     ],
     synchronize: {
       fileEvents: workspace.createFileSystemWatcher(
-        "**/*.val.{t,j}s,**/val.config.{t,j}s,**/val.modules.{t,j}s"
+        "**/*.val.{t,j}s,**/val.config.{t,j}s,**/val.modules.{t,j}s",
       ),
     },
   };
@@ -112,7 +112,7 @@ export function activate(context: ExtensionContext) {
     "valBuild",
     "Val Build IntelliSense",
     serverOptions,
-    clientOptions
+    clientOptions,
   );
 
   // Start the client. This will also launch the server
@@ -134,7 +134,7 @@ export class ValActionProvider implements vscode.CodeActionProvider {
   async provideCodeActions(
     document: vscode.TextDocument,
     _range: vscode.Range | vscode.Selection,
-    context: vscode.CodeActionContext
+    context: vscode.CodeActionContext,
   ): Promise<(vscode.CodeAction | vscode.Command)[]> {
     const actions: vscode.CodeAction[] = [];
     for (const diag of context.diagnostics) {
@@ -144,7 +144,7 @@ export class ValActionProvider implements vscode.CodeActionProvider {
       ) {
         const fix = new vscode.CodeAction(
           "Add metadata",
-          vscode.CodeActionKind.QuickFix
+          vscode.CodeActionKind.QuickFix,
         );
         fix.edit = new vscode.WorkspaceEdit();
         const sourceFile = ts.createSourceFile(
@@ -152,7 +152,7 @@ export class ValActionProvider implements vscode.CodeActionProvider {
           document.getText(diag.range),
           ts.ScriptTarget.ES2015,
           true,
-          ts.ScriptKind.TSX
+          ts.ScriptKind.TSX,
         );
 
         const res = getAddMetadataFix(sourceFile, (filename: string) => {
@@ -177,13 +177,13 @@ export class ValActionProvider implements vscode.CodeActionProvider {
         if (!validationBasisHash) {
           console.error(
             "No validation basis hash found in diag.code",
-            diag.code
+            diag.code,
           );
           return actions;
         }
         const fix = new vscode.CodeAction(
           "Upload to Val",
-          vscode.CodeActionKind.QuickFix
+          vscode.CodeActionKind.QuickFix,
         );
         fix.command = {
           title: "Upload to Val",
@@ -206,7 +206,7 @@ export class ValActionProvider implements vscode.CodeActionProvider {
       ) {
         const fix = new vscode.CodeAction(
           "Download and create local file",
-          vscode.CodeActionKind.QuickFix
+          vscode.CodeActionKind.QuickFix,
         );
         fix.edit = new vscode.WorkspaceEdit();
         fix.command = {
@@ -225,7 +225,7 @@ export class ValActionProvider implements vscode.CodeActionProvider {
       } else if (diag.code === "val:missing-module") {
         const fix = new vscode.CodeAction(
           "Add module to val.modules",
-          vscode.CodeActionKind.QuickFix
+          vscode.CodeActionKind.QuickFix,
         );
         fix.command = {
           title: "Add module to val.modules",

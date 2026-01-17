@@ -59,7 +59,7 @@ export async function loginFromVSCode(projectRootDir: string): Promise<void> {
 }
 
 async function pollForConfirmation(
-  token: string
+  token: string,
 ): Promise<{ profile: { email: string }; pat: string }> {
   const start = Date.now();
   const timeout = 30 * 1000; // 30 seconds
@@ -71,7 +71,7 @@ async function pollForConfirmation(
       `${VAL_BUILD_URL}/api/login?token=${token}&consume=true`,
       {
         method: "POST",
-      }
+      },
     );
     if (res.status === 200) {
       const json = (await res.json()) as any;
@@ -90,7 +90,7 @@ async function pollForConfirmation(
 
 function saveToken(
   result: { profile: { email: string }; pat: string },
-  filePath: string
+  filePath: string,
 ) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, JSON.stringify(result, null, 2), "utf8");
@@ -102,7 +102,7 @@ function getPersonalAccessTokenPath(root: string) {
 
 export async function updateStatusBar(
   statusBarItem: vscode.StatusBarItem,
-  projectDir: undefined | string
+  projectDir: undefined | string,
 ) {
   if (!projectDir) {
     statusBarItem.hide();

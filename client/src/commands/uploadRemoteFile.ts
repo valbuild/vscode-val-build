@@ -17,7 +17,7 @@ export const uploadRemoteFileCommand =
     console.log("Upload remote file command called with arguments:", args);
     if (!args) {
       vscode.window.showErrorMessage(
-        "No arguments provided to uploadRemoteFileCommand"
+        "No arguments provided to uploadRemoteFileCommand",
       );
       return;
     }
@@ -26,7 +26,7 @@ export const uploadRemoteFileCommand =
       const projectDirOfDocumentUri = getProjectRootDir(uri);
       if (!projectDirOfDocumentUri) {
         vscode.window.showErrorMessage(
-          "Could not find project root. This file does not seem to be in a Val project (no package.json file found in parent directories)."
+          "Could not find project root. This file does not seem to be in a Val project (no package.json file found in parent directories).",
         );
         return;
       }
@@ -56,14 +56,14 @@ export const uploadRemoteFileCommand =
         }
       } catch (err) {
         vscode.window.showErrorMessage(
-          "Val Build core not found in your project. Please install @valbuild/core in your project."
+          "Val Build core not found in your project. Please install @valbuild/core in your project.",
         );
         return;
       }
       const valConfig = await getValConfig(projectDirOfDocumentUri);
       if (!valConfig) {
         vscode.window.showErrorMessage(
-          `Could not find val.config.{ts,js} file in ${projectDirOfDocumentUri}.`
+          `Could not find val.config.{ts,js} file in ${projectDirOfDocumentUri}.`,
         );
         return;
       }
@@ -72,24 +72,24 @@ export const uploadRemoteFileCommand =
         vscode.window.showErrorMessage(
           `Could not find the 'project' field in the '${path.join(
             projectDirOfDocumentUri,
-            "val.config.{ts,js}"
-          )}' file. Please specify the project name like this: { project: 'example-org/example-name' }`
+            "val.config.{ts,js}",
+          )}' file. Please specify the project name like this: { project: 'example-org/example-name' }`,
         );
         return;
       }
       const bucketRes = await getRemoteFileBucket(
         projectDirOfDocumentUri,
-        projectName
+        projectName,
       );
       if (bucketRes.status !== "success") {
         if (bucketRes.status === "login-required") {
           vscode.window.showErrorMessage(
-            `You're not logged in to Val for project "${projectName}". Please log in to Val.`
+            `You're not logged in to Val for project "${projectName}". Please log in to Val.`,
           );
           return;
         }
         vscode.window.showErrorMessage(
-          `Could not get remote file bucket for project "${projectName}". ${bucketRes.message}`
+          `Could not get remote file bucket for project "${projectName}". ${bucketRes.message}`,
         );
         return;
       }
@@ -99,10 +99,10 @@ export const uploadRemoteFileCommand =
       if (!loggedIn) {
         const shouldLogin = await vscode.window.showInformationMessage(
           `You're not logged in to Val for project "${path.basename(
-            projectDir
+            projectDir,
           )}".`,
           "Log in",
-          "Cancel"
+          "Cancel",
         );
         if (shouldLogin === "Log in") {
           try {
@@ -112,7 +112,7 @@ export const uploadRemoteFileCommand =
             vscode.window.showErrorMessage(
               `Login failed: ${
                 err instanceof Error ? err.message : String(err)
-              }`
+              }`,
             );
             return;
           }
@@ -121,18 +121,18 @@ export const uploadRemoteFileCommand =
       const finalLoggedInCheck = isLoggedIn(projectDir);
       if (!finalLoggedInCheck) {
         vscode.window.showErrorMessage(
-          `Login failed: ${projectDir} is not logged in.`
+          `Login failed: ${projectDir} is not logged in.`,
         );
         return;
       }
       const projectSettingsRes = await getProjectSettings(
         projectDir,
-        projectName
+        projectName,
       );
       if (projectSettingsRes.status !== "success") {
         // We have already checked for login, so if there's a login error here, something else is wrong
         vscode.window.showErrorMessage(
-          `Project settings not found for project "${projectName}". Error: ${projectSettingsRes.status}`
+          `Project settings not found for project "${projectName}". Error: ${projectSettingsRes.status}`,
         );
         return;
       }
@@ -144,7 +144,7 @@ export const uploadRemoteFileCommand =
         text,
         ts.ScriptTarget.ES2015,
         true,
-        ts.ScriptKind.TSX
+        ts.ScriptKind.TSX,
       );
       const remoteFileFixRes = getRemoteUploadFileFix(
         Internal,
@@ -162,13 +162,13 @@ export const uploadRemoteFileCommand =
         },
         (filename: string) => {
           return fs.readFileSync(
-            path.join(projectDir, ...filename.split("/"))
+            path.join(projectDir, ...filename.split("/")),
           ) as Buffer;
-        }
+        },
       );
       if (remoteFileFixRes === null) {
         vscode.window.showErrorMessage(
-          "Unexpected error: could not create remote file fix"
+          "Unexpected error: could not create remote file fix",
         );
         return;
       }
@@ -179,7 +179,7 @@ export const uploadRemoteFileCommand =
       const fileBuffer = remoteFileFixRes.fileBuffer;
       if (!newNodeText) {
         vscode.window.showErrorMessage(
-          `Could not create new node text for code snippet: '${text}'`
+          `Could not create new node text for code snippet: '${text}'`,
         );
         return;
       }
@@ -201,10 +201,10 @@ export const uploadRemoteFileCommand =
               progress.report({
                 increment: Math.round((bytesSent / totalBytes) * 100),
                 message: `Uploading ${filename} (${Math.round(
-                  (bytesSent / totalBytes) * 100
+                  (bytesSent / totalBytes) * 100,
                 )}%)`,
               });
-            }
+            },
           );
           progress.report({
             increment: 100,
@@ -221,19 +221,19 @@ export const uploadRemoteFileCommand =
             await vscode.workspace.applyEdit(edit);
             if (uploadRes.status === "file-already-exists") {
               vscode.window.showInformationMessage(
-                `Code fix applied (file ${filename} already exists)`
+                `Code fix applied (file ${filename} already exists)`,
               );
             } else {
               vscode.window.showInformationMessage(
-                `File uploaded ${filename} and code fix has been applied`
+                `File uploaded ${filename} and code fix has been applied`,
               );
             }
           } else {
             vscode.window.showErrorMessage(
-              `Upload failed for ${filename}. Error: ${uploadRes.message}`
+              `Upload failed for ${filename}. Error: ${uploadRes.message}`,
             );
           }
-        }
+        },
       );
     } catch (err) {
       vscode.window.showErrorMessage(`Upload failed: ${err}`);

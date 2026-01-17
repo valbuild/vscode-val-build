@@ -10,7 +10,7 @@ let cache: Record<string, Record<string, Settings>> = {};
 
 export async function getProjectSettings(
   projectDir: string,
-  projectName: string
+  projectName: string,
 ): Promise<
   | {
       status: "success";
@@ -58,7 +58,7 @@ export async function getProjectSettings(
 
 async function fetchProjectSettings(
   projectName: string,
-  auth: { pat: string } | { apiKey: string }
+  auth: { pat: string } | { apiKey: string },
 ): Promise<
   | {
       success: true;
@@ -83,7 +83,7 @@ async function fetchProjectSettings(
                 Authorization: `Bearer ${auth.apiKey}`,
                 "Content-Type": "application/json",
               },
-      }
+      },
     );
     if (response.status === 404) {
       return {

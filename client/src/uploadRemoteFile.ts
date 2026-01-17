@@ -11,7 +11,7 @@ export async function uploadRemoteFile(
   fileExt: string,
   fileHash: string,
   fileBuffer: Buffer,
-  onProgress?: ProgressCallback
+  onProgress?: ProgressCallback,
 ): Promise<
   | {
       status: "success";
@@ -40,7 +40,7 @@ export async function uploadRemoteFile(
       status: "error",
       message: `Could not find the 'project' field in the '${path.join(
         projectRootDir,
-        "val.config.{ts,js}"
+        "val.config.{ts,js}",
       )}' file. Please specify the project name like this: { project: 'example-org/example-name' }`,
     };
   }
@@ -59,7 +59,7 @@ export async function uploadRemoteFile(
     fileExt,
     fileBuffer,
     auth,
-    onProgress
+    onProgress,
   );
   if (res.success === true) {
     return {
@@ -82,7 +82,7 @@ export async function uploadRemoteFileImpl(
   fileExt: string,
   fileBuffer: Buffer,
   auth: { pat: string } | { apiKey: string },
-  onProgress?: ProgressCallback
+  onProgress?: ProgressCallback,
 ): Promise<{ success: true } | { success: false; error: string }> {
   const totalBytes = fileBuffer.length;
 
@@ -92,7 +92,7 @@ export async function uploadRemoteFileImpl(
       : { "x-val-pat": auth.pat };
 
   const url = new URL(
-    `${contentHost}/v1/${project}/remote/files/b/${bucket}/f/${fileHash}.${fileExt}`
+    `${contentHost}/v1/${project}/remote/files/b/${bucket}/f/${fileHash}.${fileExt}`,
   );
 
   const headers = {
@@ -144,7 +144,7 @@ export async function uploadRemoteFileImpl(
             }
           }
         });
-      }
+      },
     );
 
     req.on("error", (err) => {

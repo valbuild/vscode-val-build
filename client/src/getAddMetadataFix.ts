@@ -2,11 +2,11 @@ import * as ts from "typescript";
 
 export const getAddMetadataFix = (
   sourceFile: ts.SourceFile,
-  getMetadata: (filename: string) => Record<string, string | number>
+  getMetadata: (filename: string) => Record<string, string | number>,
 ) => {
   let newCallExpression: ts.CallExpression;
   const transformerFactory: ts.TransformerFactory<ts.SourceFile> = (
-    context
+    context,
   ) => {
     return (sourceFile) => {
       const visitor = (node: ts.Node): ts.Node => {
@@ -14,7 +14,7 @@ export const getAddMetadataFix = (
           const filenameNode = node.arguments[0];
           if (ts.isStringLiteral(filenameNode) && !node.arguments[1]) {
             const metadata: Record<string, string | number> = getMetadata(
-              filenameNode.text
+              filenameNode.text,
             );
             newCallExpression = ts.factory.updateCallExpression(
               node,
@@ -31,15 +31,15 @@ export const getAddMetadataFix = (
                         ? value < 0
                           ? ts.factory.createPrefixUnaryExpression(
                               ts.SyntaxKind.MinusToken,
-                              ts.factory.createNumericLiteral(value.toString())
+                              ts.factory.createNumericLiteral(value.toString()),
                             )
                           : ts.factory.createNumericLiteral(value.toString())
-                        : ts.factory.createStringLiteral(value)
-                    )
+                        : ts.factory.createStringLiteral(value),
+                    ),
                   ) as ts.PropertyAssignment[],
-                  true
+                  true,
                 ),
-              ]
+              ],
             );
             return newCallExpression;
           }
@@ -57,7 +57,7 @@ export const getAddMetadataFix = (
       .printNode(
         ts.EmitHint.Unspecified,
         result.transformed[0],
-        result.transformed[0]
+        result.transformed[0],
       )
       .trim();
     newNodeText =

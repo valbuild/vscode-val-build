@@ -51,7 +51,7 @@ export default c.define('/content/company/allEmployees.val.ts', schema, {
       getText(input, range),
       ts.ScriptTarget.ES2015,
       true,
-      ts.ScriptKind.TSX
+      ts.ScriptKind.TSX,
     );
     console.log(getText(input, range));
     const res = getAddMetadataFix(sourceFile, () => {
@@ -67,14 +67,14 @@ export default c.define('/content/company/allEmployees.val.ts', schema, {
     mimeType: "image/png",
     width: 42,
     height: 42
-}), `
+}), `,
     );
   });
 });
 
 type Range = [
   { line: number; character: number },
-  { line: number; character: number }
+  { line: number; character: number },
 ];
 function getText(input: string, range: Range) {
   const lines = input.split("\n");

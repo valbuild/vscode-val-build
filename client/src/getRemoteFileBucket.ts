@@ -13,7 +13,7 @@ let cache: Record<
 
 export async function getRemoteFileBucket(
   projectDir: string,
-  projectName: string
+  projectName: string,
 ): Promise<
   | {
       status: "success";
@@ -28,7 +28,7 @@ export async function getRemoteFileBucket(
   if (cache[projectDir][projectName] === undefined) {
     const projectSettingsRes = await getProjectSettings(
       projectDir,
-      projectName
+      projectName,
     );
     if (projectSettingsRes.status !== "success") {
       return projectSettingsRes;

@@ -61,7 +61,7 @@ export default c.define('/content/company/allEmployees.val.ts', schema, {
       getText(input, range),
       ts.ScriptTarget.ES2015,
       true,
-      ts.ScriptKind.TSX
+      ts.ScriptKind.TSX,
     );
     const bucket = "v01";
     const publicProjectId = "12345";
@@ -83,7 +83,7 @@ export default c.define('/content/company/allEmployees.val.ts', schema, {
       },
       () => {
         return Buffer.from("fakeBuffer");
-      }
+      },
     );
     assert.deepStrictEqual(
       res.newNodeText,
@@ -95,14 +95,14 @@ export default c.define('/content/company/allEmployees.val.ts', schema, {
         x: 0.5062893081761006,
         y: 0.4293465501781632,
     }
-}), `
+}), `,
     );
   });
 });
 
 type Range = [
   { line: number; character: number },
-  { line: number; character: number }
+  { line: number; character: number },
 ];
 function getText(input: string, range: Range) {
   const lines = input.split("\n");

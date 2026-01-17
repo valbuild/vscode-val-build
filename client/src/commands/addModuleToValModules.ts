@@ -6,7 +6,7 @@ import * as ts from "typescript";
 // Exported helper functions for testing
 export function calculateRelativePath(
   valModulesFile: string,
-  filePath: string
+  filePath: string,
 ): string {
   return path
     .relative(path.dirname(valModulesFile), filePath)
@@ -16,7 +16,7 @@ export function calculateRelativePath(
 
 export function findInsertionPoint(
   valModulesContent: string,
-  valModulesFile: string
+  valModulesFile: string,
 ): {
   insertPosition: number | null;
   indentation: string;
@@ -25,7 +25,7 @@ export function findInsertionPoint(
     valModulesFile,
     valModulesContent,
     ts.ScriptTarget.Latest,
-    true
+    true,
   );
 
   let insertPosition: number | null = null;
@@ -52,7 +52,7 @@ export function findInsertionPoint(
             // Detect indentation from the first element
             const firstElement = secondArg.elements[0];
             const firstElementPos = sourceFile.getLineAndCharacterOfPosition(
-              firstElement.getStart(sourceFile)
+              firstElement.getStart(sourceFile),
             );
             indentation = " ".repeat(firstElementPos.character);
           } else {
@@ -71,7 +71,7 @@ export function findInsertionPoint(
 export function generateInsertText(
   relativePath: string,
   indentation: string,
-  hasExistingElements: boolean
+  hasExistingElements: boolean,
 ): string {
   const importStatement = `{ def: () => import("./${relativePath}") }`;
   return hasExistingElements
@@ -88,7 +88,7 @@ export const addModuleToValModulesCommand = async (args: {
 
   if (!args || !args.filePath || !args.valRoot || !args.valModulesFile) {
     vscode.window.showErrorMessage(
-      "Invalid arguments provided to addModuleToValModulesCommand"
+      "Invalid arguments provided to addModuleToValModulesCommand",
     );
     return;
   }
@@ -105,12 +105,12 @@ export const addModuleToValModulesCommand = async (args: {
     // Find insertion point using helper
     const { insertPosition, indentation } = findInsertionPoint(
       valModulesContent,
-      valModulesFile
+      valModulesFile,
     );
 
     if (insertPosition === null) {
       vscode.window.showErrorMessage(
-        "Could not find modules array in val.modules file"
+        "Could not find modules array in val.modules file",
       );
       return;
     }
@@ -122,9 +122,8 @@ export const addModuleToValModulesCommand = async (args: {
     // Create the edit
     const edit = new vscode.WorkspaceEdit();
     const valModulesUri = vscode.Uri.file(valModulesFile);
-    const valModulesDocument = await vscode.workspace.openTextDocument(
-      valModulesUri
-    );
+    const valModulesDocument =
+      await vscode.workspace.openTextDocument(valModulesUri);
     const position = valModulesDocument.positionAt(insertPosition);
 
     edit.insert(valModulesUri, position, newText);
@@ -134,7 +133,7 @@ export const addModuleToValModulesCommand = async (args: {
 
     if (success) {
       vscode.window.showInformationMessage(
-        `Added module ${path.basename(filePath)} to val.modules`
+        `Added module ${path.basename(filePath)} to val.modules`,
       );
       // Save the file
       const doc = await vscode.workspace.openTextDocument(valModulesUri);
@@ -145,7 +144,7 @@ export const addModuleToValModulesCommand = async (args: {
   } catch (error) {
     console.error("Error adding module to val.modules:", error);
     vscode.window.showErrorMessage(
-      `Failed to add module to val.modules: ${error.message}`
+      `Failed to add module to val.modules: ${error.message}`,
     );
   }
 };

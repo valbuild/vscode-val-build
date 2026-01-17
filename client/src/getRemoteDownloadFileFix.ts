@@ -4,7 +4,7 @@ import { getFileExt } from "./getFileExt";
 export function getRemoteDownloadFileFix(
   Internal: unknown,
   newType: "image" | "file",
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
 ): {
   newNodeText: string;
   newLocalFilePath: string;
@@ -14,7 +14,7 @@ export function getRemoteDownloadFileFix(
   let foundRemoteRef: string | null = null;
   let newLocalFilePath: string | null = null;
   const transformerFactory: ts.TransformerFactory<ts.SourceFile> = (
-    context
+    context,
   ) => {
     return (sourceFile) => {
       const visitor = (node: ts.Node): ts.Node => {
@@ -35,7 +35,7 @@ export function getRemoteDownloadFileFix(
                 ts.factory.updatePropertyAccessExpression(
                   node.expression,
                   node.expression.expression,
-                  ts.factory.createIdentifier(newType)
+                  ts.factory.createIdentifier(newType),
                 );
               const metadataExpr = node.arguments[1];
               if (!ts.isObjectLiteralExpression(metadataExpr)) {
@@ -65,12 +65,12 @@ export function getRemoteDownloadFileFix(
                       foundRemoteRef +
                       " in source file: " +
                       sourceFile.fileName +
-                      ". This VS Code extension might not be compatible with the version of Val Build that is used in this project."
+                      ". This VS Code extension might not be compatible with the version of Val Build that is used in this project.",
                   );
                 }
               } else {
                 throw new Error(
-                  "Internal.remote.splitRemoteRef is not a function"
+                  "Internal.remote.splitRemoteRef is not a function",
                 );
               }
               const { filePath, fileHash } = splitRemoteRefDataRes;
@@ -80,7 +80,7 @@ export function getRemoteDownloadFileFix(
               if (!filePath.endsWith("_" + shortFileHash + "." + fileExt)) {
                 newLocalFilePath = `${filePath.slice(
                   0,
-                  -`.${fileExt}`.length
+                  -`.${fileExt}`.length,
                 )}_${shortFileHash}.${fileExt}`;
               }
               newCallExpression = ts.factory.updateCallExpression(
@@ -90,7 +90,7 @@ export function getRemoteDownloadFileFix(
                 [
                   ts.factory.createStringLiteral(`/${newLocalFilePath}`),
                   metadataExpr,
-                ]
+                ],
               );
               return newCallExpression;
             }
@@ -108,7 +108,7 @@ export function getRemoteDownloadFileFix(
       .printNode(
         ts.EmitHint.Unspecified,
         result.transformed[0],
-        result.transformed[0]
+        result.transformed[0],
       )
       .trim();
     newNodeText =

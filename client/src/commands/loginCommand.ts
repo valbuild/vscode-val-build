@@ -16,7 +16,7 @@ export const loginCommand =
         await loginFromVSCode(projectDir);
         console.log("Logged in successfully");
         vscode.window.showInformationMessage(
-          `Logged in to Val for project at ${projectDir}`
+          `Logged in to Val for project at ${projectDir}`,
         );
         updateStatusBar(statusBarItem, projectDir);
         return;
@@ -26,7 +26,7 @@ export const loginCommand =
     } catch (err) {
       console.error("Login failed:", err);
       vscode.window.showErrorMessage(
-        `Val login failed: ${err instanceof Error ? err.message : String(err)}`
+        `Val login failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   };
