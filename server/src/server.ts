@@ -140,15 +140,31 @@ connection.onInitialize(async (params: InitializeParams) => {
   const cachedFileSystem = createCachedFileSystem(cache);
 
   // Initialize services for each Val root
+  const maybeServicesByValRoot = await Promise.all(
+    valRoots
+      .filter((valRoot) => !valRoot.includes("node_modules"))
+      .map(async (valRoot) => {
+        const service = await initializeService(
+          valRoot,
+          cachedFileSystem,
+        ).catch((err) => {
+          console.error(
+            `Error initializing Val service for root: ${valRoot}`,
+            err,
+          );
+          return null;
+        });
+        if (service) {
+          return [valRoot, service] as const;
+        }
+        return null;
+      }),
+  );
   servicesByValRoot = Object.fromEntries(
-    await Promise.all(
-      valRoots
-        .filter((valRoot) => !valRoot.includes("node_modules"))
-        .map(async (valRoot) => {
-          const service = await initializeService(valRoot, cachedFileSystem);
-          return [valRoot, service];
-        })
-    )
+    maybeServicesByValRoot.filter((maybeService) => maybeService !== null) as [
+      string,
+      ValService,
+    ][],
   );
 
   // Initialize public val files cache for each Val root
@@ -315,8 +331,7 @@ async function initializeService(
   // Find tsconfig.json or jsconfig.json
   const configPath = findConfigFile(valRoot);
   if (!configPath) {
-    console.error(`No tsconfig.json or jsconfig.json found for: ${valRoot}`);
-    throw new Error(`No config file found for Val root: ${valRoot}`);
+    throw new Error(`No tsconfig.json or jsconfig.json found for: ${valRoot}`);
   }
 
   // Create custom host that uses our cached file system
@@ -348,7 +363,6 @@ async function initializeService(
   // Get val.modules file path
   const valModulesFile = valModulesFilesByValRoot[valRoot];
   if (!valModulesFile) {
-    console.error(`No val.modules file found for: ${valRoot}`);
     throw new Error(`No val.modules file found for Val root: ${valRoot}`);
   }
 
