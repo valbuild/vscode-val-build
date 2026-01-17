@@ -75,7 +75,11 @@ export default modules(config, [
     const testFilePath = path.join(tempDir, "src", "test.val.ts");
     const result = isFileInValModulesAST(testFilePath, valRoot, valModulesFile);
 
-    assert.strictEqual(result, false, "Should not find the file in val.modules");
+    assert.strictEqual(
+      result,
+      false,
+      "Should not find the file in val.modules",
+    );
   });
 
   it("should handle empty modules array", () => {
@@ -94,7 +98,7 @@ export default modules(config, []);
     assert.strictEqual(
       result,
       false,
-      "Should return false for empty modules array"
+      "Should return false for empty modules array",
     );
   });
 
@@ -116,7 +120,7 @@ export default modules(config, [
     assert.strictEqual(
       result,
       true,
-      "Should handle nested directory paths correctly"
+      "Should handle nested directory paths correctly",
     );
   });
 
@@ -135,11 +139,7 @@ export default modules(config, [
     const testFilePath = path.join(tempDir, "src", "test.val.js");
     const result = isFileInValModulesAST(testFilePath, valRoot, valModulesFile);
 
-    assert.strictEqual(
-      result,
-      true,
-      "Should handle .val.js files correctly"
-    );
+    assert.strictEqual(result, true, "Should handle .val.js files correctly");
   });
 
   it("should return false when val.modules file doesn't exist", () => {
@@ -148,13 +148,13 @@ export default modules(config, [
     const result = isFileInValModulesAST(
       testFilePath,
       valRoot,
-      nonExistentFile
+      nonExistentFile,
     );
 
     assert.strictEqual(
       result,
       false,
-      "Should return false when val.modules doesn't exist"
+      "Should return false when val.modules doesn't exist",
     );
   });
 });

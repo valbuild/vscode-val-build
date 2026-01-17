@@ -28,11 +28,11 @@ export interface CompletionContext {
  */
 export function detectCompletionContext(
   sourceFile: ts.SourceFile,
-  position: { line: number; character: number }
+  position: { line: number; character: number },
 ): CompletionContext {
   const offset = sourceFile.getPositionOfLineAndCharacter(
     position.line,
-    position.character
+    position.character,
   );
 
   let context: CompletionContext = {
@@ -74,7 +74,7 @@ export function detectCompletionContext(
       // Get the partial text up to cursor position (relative to content start)
       const textUpToCursor = nodeAtPosition.text.substring(
         0,
-        Math.max(0, offset - contentStart)
+        Math.max(0, offset - contentStart),
       );
       context.partialText = textUpToCursor;
 

@@ -10,7 +10,7 @@ export function loadTsConfig(tsconfigPath: string, host: ts.ParseConfigHost) {
   return ts.parseJsonConfigFileContent(
     configFile.config,
     host,
-    path.dirname(tsconfigPath)
+    path.dirname(tsconfigPath),
   );
 }
 
@@ -83,13 +83,13 @@ export function createTsVmRuntime(opts: {
         specifier,
         filename,
         compilerOptions,
-        opts.host
+        opts.host,
       );
 
       // Debug: Log resolution attempts for path-mapped modules
       if (resolved.resolvedModule) {
         console.log(
-          `Resolved ${specifier} to ${resolved.resolvedModule.resolvedFileName}`
+          `Resolved ${specifier} to ${resolved.resolvedModule.resolvedFileName}`,
         );
       } else if (
         compilerOptions.paths &&
@@ -99,7 +99,7 @@ export function createTsVmRuntime(opts: {
         console.log(`Failed to resolve ${specifier} from ${filename}`);
         console.log(
           `Available paths:`,
-          Object.keys(compilerOptions.paths || {})
+          Object.keys(compilerOptions.paths || {}),
         );
         console.log(`Base URL:`, compilerOptions.baseUrl);
       }
@@ -107,7 +107,7 @@ export function createTsVmRuntime(opts: {
       // If TypeScript resolved it to a file, load it
       if (resolved.resolvedModule) {
         const resolvedFile = path.normalize(
-          resolved.resolvedModule.resolvedFileName
+          resolved.resolvedModule.resolvedFileName,
         );
 
         // If it resolved to a .d.ts file from node_modules, use projectRequire
@@ -127,7 +127,7 @@ export function createTsVmRuntime(opts: {
               `Cannot load module '${specifier}' - TypeScript resolved to ${resolvedFile} but the implementation could not be loaded. ` +
                 `Error: ${
                   error instanceof Error ? error.message : String(error)
-                }`
+                }`,
             );
           }
         }
@@ -145,7 +145,7 @@ export function createTsVmRuntime(opts: {
           // If module can't be found in project, throw a clear error
           throw new Error(
             `Cannot find module '${specifier}' from ${filename}. ` +
-              `Make sure the module is installed in the project's node_modules.`
+              `Make sure the module is installed in the project's node_modules.`,
           );
         }
       }
@@ -208,7 +208,7 @@ ${code}
       sandbox.require,
       moduleObject,
       normalized,
-      path.dirname(normalized)
+      path.dirname(normalized),
     );
 
     moduleObject.loaded = true;

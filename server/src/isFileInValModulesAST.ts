@@ -9,7 +9,7 @@ import ts from "typescript";
 export function isFileInValModulesAST(
   filePath: string,
   valRoot: string,
-  valModulesFile: string
+  valModulesFile: string,
 ): boolean {
   try {
     const valModulesContent = fs.readFileSync(valModulesFile, "utf-8");
@@ -24,7 +24,7 @@ export function isFileInValModulesAST(
       valModulesFile,
       valModulesContent,
       ts.ScriptTarget.Latest,
-      true
+      true,
     );
 
     let foundImport = false;

@@ -22,7 +22,7 @@ function createMockCache(): PublicValFilesCache {
 // Helper to create a mock service
 function createMockService(
   modules: ValModuleResult[],
-  readResult?: any
+  readResult?: any,
 ): ValService {
   return {
     getAllModules: async () => modules,
@@ -60,7 +60,7 @@ describe("completionProviders", () => {
           fakeNextAppRouter,
           s.object({
             title: s.string(),
-          })
+          }),
         )
         ["executeSerialize"]();
 
@@ -94,7 +94,7 @@ describe("completionProviders", () => {
             defaultExport: true,
           },
         ],
-        readResult
+        readResult,
       );
 
       // Create a test source file with a route field
@@ -109,7 +109,7 @@ export default c.define(
         "/test.val.ts",
         testCode,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Find the string literal "/home" in the source
@@ -137,7 +137,7 @@ export default c.define(
         context,
         service,
         "/test/root",
-        sourceFile
+        sourceFile,
       );
 
       assert.strictEqual(items.length, 3);
@@ -174,7 +174,7 @@ export default c.define(
             defaultExport: true,
           },
         ],
-        readResult
+        readResult,
       );
 
       // Create a test source file with a route field
@@ -189,7 +189,7 @@ export default c.define(
         "/test.val.ts",
         testCode,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Find the string literal "/" in the source
@@ -217,7 +217,7 @@ export default c.define(
         context,
         service,
         "/test/root",
-        sourceFile
+        sourceFile,
       );
 
       assert.strictEqual(items.length, 0);
@@ -237,7 +237,7 @@ export default c.define(
           fakeNextAppRouter,
           s.object({
             title: s.string(),
-          })
+          }),
         )
         ["executeSerialize"]();
 
@@ -280,7 +280,7 @@ export default c.define(
             defaultExport: true,
           },
         ],
-        readResult
+        readResult,
       );
 
       // Create a test source file with a route field
@@ -295,7 +295,7 @@ export default c.define(
         "/test.val.ts",
         testCode,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Find the string literal "/" in the source
@@ -323,7 +323,7 @@ export default c.define(
         context,
         service,
         "/test/root",
-        sourceFile
+        sourceFile,
       );
 
       // Should have 3 unique routes (/home, /about, /contact)
@@ -356,7 +356,7 @@ export default c.define(
         "/test.val.ts",
         testCode,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Find the string literal "/" in the source
@@ -384,7 +384,7 @@ export default c.define(
         context,
         service,
         "/test/root",
-        sourceFile
+        sourceFile,
       );
 
       // Should return empty array on error
@@ -429,7 +429,7 @@ export default c.define(
             defaultExport: true,
           },
         ],
-        readResult
+        readResult,
       );
 
       // Create a test source file with a string literal
@@ -444,7 +444,7 @@ export default c.define(
         "/test.val.ts",
         testCode,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Find the string literal "/old" in the source
@@ -472,7 +472,7 @@ export default c.define(
         context,
         service,
         "/test/root",
-        sourceFile
+        sourceFile,
       );
 
       // Should have routes
@@ -484,7 +484,7 @@ export default c.define(
         assert.strictEqual(
           (item.textEdit as any).newText,
           item.label,
-          "textEdit should replace with the route label"
+          "textEdit should replace with the route label",
         );
       }
     });
@@ -532,7 +532,7 @@ export default c.define(
             defaultExport: true,
           },
         ],
-        readResult
+        readResult,
       );
 
       const testCode = `
@@ -546,7 +546,7 @@ export default c.define(
         "/test.val.ts",
         testCode,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       let stringNode: ts.StringLiteral | undefined;
@@ -573,7 +573,7 @@ export default c.define(
         context,
         service,
         "/test/root",
-        sourceFile
+        sourceFile,
       );
 
       // Should only return routes matching /^\/admin/
@@ -627,7 +627,7 @@ export default c.define(
             defaultExport: true,
           },
         ],
-        readResult
+        readResult,
       );
 
       const testCode = `
@@ -641,7 +641,7 @@ export default c.define(
         "/test.val.ts",
         testCode,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       let stringNode: ts.StringLiteral | undefined;
@@ -668,7 +668,7 @@ export default c.define(
         context,
         service,
         "/test/root",
-        sourceFile
+        sourceFile,
       );
 
       // Should only return routes NOT matching /^\/admin/
@@ -723,7 +723,7 @@ export default c.define(
             defaultExport: true,
           },
         ],
-        readResult
+        readResult,
       );
 
       const testCode = `
@@ -737,7 +737,7 @@ export default c.define(
         "/test.val.ts",
         testCode,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       let stringNode: ts.StringLiteral | undefined;
@@ -764,7 +764,7 @@ export default c.define(
         context,
         service,
         "/test/root",
-        sourceFile
+        sourceFile,
       );
 
       // Should only return routes matching /^\/api/ but NOT matching /\/admin/
@@ -846,7 +846,7 @@ export default c.define(
             defaultExport: true,
           },
         ],
-        readResult
+        readResult,
       );
 
       const testCode = `
@@ -873,7 +873,7 @@ export default c.define(
         "/test.val.ts",
         testCode,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Find the string literal "/" in the href field
@@ -913,7 +913,7 @@ export default c.define(
         context,
         service,
         "/test/root",
-        sourceFile
+        sourceFile,
       );
 
       // Should find the route field inside the union and provide all routes
@@ -991,7 +991,7 @@ export default c.define(
             defaultExport: true,
           },
         ],
-        readResult
+        readResult,
       );
 
       const testCode = `
@@ -1018,7 +1018,7 @@ export default c.define(
         "/test.val.ts",
         testCode,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       let stringNode: ts.StringLiteral | undefined;
@@ -1056,7 +1056,7 @@ export default c.define(
         context,
         service,
         "/test/root",
-        sourceFile
+        sourceFile,
       );
 
       // Should find the nested route field and apply exclude pattern
@@ -1131,7 +1131,7 @@ export default c.define(
         "/test.val.ts",
         testCode,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Find the string literal "user1" in the source
@@ -1159,7 +1159,7 @@ export default c.define(
         context,
         service,
         "/test/root",
-        sourceFile
+        sourceFile,
       );
 
       // Should have 3 keys (user1, user2, user3)
@@ -1204,7 +1204,7 @@ export default c.define(
         "/test.val.ts",
         testCode,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Find the string literal "test" in the source
@@ -1232,7 +1232,7 @@ export default c.define(
         context,
         service,
         "/test/root",
-        sourceFile
+        sourceFile,
       );
 
       // Should return empty array when field is not keyOf
@@ -1260,7 +1260,7 @@ export default c.define(
         "/test.val.ts",
         testCode,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Find the string literal "test" in the source
@@ -1288,7 +1288,7 @@ export default c.define(
         context,
         service,
         "/test/root",
-        sourceFile
+        sourceFile,
       );
 
       // Should return empty array on error
@@ -1354,7 +1354,7 @@ export default c.define(
         "/test.val.ts",
         testCode,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Find the string literal "old" in the source
@@ -1382,7 +1382,7 @@ export default c.define(
         context,
         service,
         "/test/root",
-        sourceFile
+        sourceFile,
       );
 
       // Should have keys
@@ -1394,7 +1394,7 @@ export default c.define(
         assert.strictEqual(
           (item.textEdit as any).newText,
           item.label,
-          "textEdit should replace with the key label"
+          "textEdit should replace with the key label",
         );
       }
     });
@@ -1429,7 +1429,7 @@ export default c.define(
       const items = await registry.getCompletionItems(
         context,
         service,
-        "/test/root"
+        "/test/root",
       );
 
       assert.strictEqual(items.length, 0);
@@ -1449,7 +1449,7 @@ export default c.define(
           fakeNextAppRouter,
           s.object({
             title: s.string(),
-          })
+          }),
         )
         ["executeSerialize"]();
 
@@ -1496,7 +1496,7 @@ export default c.define(
         "/test.val.ts",
         testCode,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Find the string literal "/test" in the source
@@ -1526,7 +1526,7 @@ export default c.define(
         context,
         service,
         "/test/root",
-        sourceFile
+        sourceFile,
       );
 
       assert.strictEqual(items.length, 1);
@@ -1557,7 +1557,7 @@ export default c.image("");
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Find the empty string literal
@@ -1585,7 +1585,7 @@ export default c.image("");
         context,
         service,
         "/test/root",
-        sourceFile
+        sourceFile,
       );
 
       // Should only return image files (4 images, not the CSS file)
@@ -1614,7 +1614,7 @@ export default c.image("");
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       let stringNode: ts.StringLiteral | undefined;
@@ -1639,7 +1639,7 @@ export default c.image("");
         context,
         service,
         "/test/root",
-        sourceFile
+        sourceFile,
       );
 
       assert.strictEqual(items.length, 0);
@@ -1669,7 +1669,7 @@ export default c.file("");
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Find the empty string literal
@@ -1697,7 +1697,7 @@ export default c.file("");
         context,
         service,
         "/test/root",
-        sourceFile
+        sourceFile,
       );
 
       // Should return all 5 files
@@ -1726,7 +1726,7 @@ export default c.file("");
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       let stringNode: ts.StringLiteral | undefined;
@@ -1751,7 +1751,7 @@ export default c.file("");
         context,
         service,
         "/test/root",
-        sourceFile
+        sourceFile,
       );
 
       assert.strictEqual(items.length, 0);

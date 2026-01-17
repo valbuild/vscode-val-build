@@ -81,7 +81,7 @@ let moduleIndexMappingsByValRoot: {
 const publicValFilesCache = new PublicValFilesCache();
 // Initialize completion provider registry
 const completionProviderRegistry = new CompletionProviderRegistry(
-  publicValFilesCache
+  publicValFilesCache,
 );
 
 connection.onInitialize(async (params: InitializeParams) => {
@@ -109,17 +109,20 @@ connection.onInitialize(async (params: InitializeParams) => {
     valConfigFiles.push(
       ...(await glob(
         `${uriToFsPath(workspaceFolder.uri)}/**/val.config.{t,j}s`,
-        {}
-      ))
+        {},
+      )),
     );
     valModulesFiles.push(
       ...(await glob(
         `${uriToFsPath(workspaceFolder.uri)}/**/val.modules.{t,j}s`,
-        {}
-      ))
+        {},
+      )),
     );
     packageJsonFiles.push(
-      ...(await glob(`${uriToFsPath(workspaceFolder.uri)}/**/package.json`, {}))
+      ...(await glob(
+        `${uriToFsPath(workspaceFolder.uri)}/**/package.json`,
+        {},
+      )),
     );
   }
   valRoots = getValRoots(valConfigFiles, packageJsonFiles);
@@ -131,7 +134,7 @@ connection.onInitialize(async (params: InitializeParams) => {
     if (valModulesFile) {
       valModulesFilesByValRoot[valRoot] = valModulesFile;
       console.log(
-        `Found val.modules file for root '${valRoot}': ${valModulesFile}`
+        `Found val.modules file for root '${valRoot}': ${valModulesFile}`,
       );
     }
   }
@@ -169,7 +172,7 @@ connection.onInitialize(async (params: InitializeParams) => {
 
   // Initialize public val files cache for each Val root
   for (const valRoot of valRoots.filter(
-    (valRoot) => !valRoot.includes("node_modules")
+    (valRoot) => !valRoot.includes("node_modules"),
   )) {
     await publicValFilesCache.initialize(valRoot);
     console.log(`Initialized public val files cache for root: ${valRoot}`);
@@ -203,7 +206,7 @@ function getValRoots(valConfigFiles: string[], packageJsonFiles: string[]) {
   for (const packageJsonFile of packageJsonFiles) {
     if (
       valConfigFiles.some((valConfigFile) =>
-        valConfigFile.startsWith(path.dirname(packageJsonFile))
+        valConfigFile.startsWith(path.dirname(packageJsonFile)),
       )
     ) {
       valRoots.push(path.dirname(packageJsonFile));
@@ -223,7 +226,7 @@ connection.onInitialized(() => {
     // Register for all configuration changes.
     connection.client.register(
       DidChangeConfigurationNotification.type,
-      undefined
+      undefined,
     );
   }
   if (hasWorkspaceFolderCapability) {
@@ -324,7 +327,7 @@ function createCachedFileSystem(cache: Map<string, any>): ValFileSystem {
 // Initialize a service for a given root directory
 async function initializeService(
   valRoot: string,
-  fileSystem: ValFileSystem
+  fileSystem: ValFileSystem,
 ): Promise<ValService> {
   console.log("Initializing Val Service for: '" + valRoot + "'...");
 
@@ -393,7 +396,7 @@ async function initializeService(
 
   // Helper to get a single module by path using index
   const getSingleModuleByPath = async (
-    path: string
+    path: string,
   ): Promise<{ module: ValModuleResult; fromIndex: boolean } | null> => {
     const indexMapping = moduleIndexMappingsByValRoot[valRoot];
     const index = indexMapping.get(path);
@@ -564,7 +567,7 @@ function hasDefaultCDefineExport(fileContent: string): {
       "temp.ts",
       fileContent,
       ts.ScriptTarget.Latest,
-      true
+      true,
     );
 
     for (const statement of sourceFile.statements) {
@@ -597,10 +600,10 @@ function hasDefaultCDefineExport(fileContent: string): {
 
             // Get the position of the export statement
             const start = sourceFile.getLineAndCharacterOfPosition(
-              statement.getStart(sourceFile)
+              statement.getStart(sourceFile),
             );
             const end = sourceFile.getLineAndCharacterOfPosition(
-              statement.getEnd()
+              statement.getEnd(),
             );
             return {
               found: true,
@@ -634,7 +637,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
   // Prevent cascading revalidations
   if (validatingDocuments.has(fsPath)) {
     console.log(
-      `Skipping revalidation for ${fsPath} - already being validated`
+      `Skipping revalidation for ${fsPath} - already being validated`,
     );
     return;
   }
@@ -654,7 +657,7 @@ async function validateTextDocumentInternal(
   textDocument: TextDocument,
   text: string,
   fsPath: string,
-  diagnostics: Diagnostic[]
+  diagnostics: Diagnostic[],
 ): Promise<void> {
   const valRoot = valRoots?.find((valRoot) => fsPath.startsWith(valRoot));
   const service = valRoot ? servicesByValRoot[valRoot] : undefined;
@@ -678,7 +681,7 @@ async function validateTextDocumentInternal(
       // If val.modules file itself changed, clear the index mapping
       if (fsPath.includes("val.modules")) {
         console.log(
-          `val.modules changed, clearing index mapping for: ${valRoot}`
+          `val.modules changed, clearing index mapping for: ${valRoot}`,
         );
         if (moduleIndexMappingsByValRoot[valRoot]) {
           moduleIndexMappingsByValRoot[valRoot].clear();
@@ -700,7 +703,7 @@ async function validateTextDocumentInternal(
         // If a .val file changed, revalidate all other open .val files
         // since they might depend on this file's schema (e.g., via keyOf)
         console.log(
-          `Val module changed: ${fsPath}, revalidating dependent files for: ${valRoot}`
+          `Val module changed: ${fsPath}, revalidating dependent files for: ${valRoot}`,
         );
         documents.all().forEach((doc) => {
           const docPath = decodeURIComponent(uriToFsPath(doc.uri));
@@ -721,7 +724,7 @@ async function validateTextDocumentInternal(
   if (valRoot && service && isValModule) {
     const { source, schema, errors } = await service.read(
       fsPath.replace(valRoot, "") as ModuleFilePath,
-      "" as ModulePath
+      "" as ModulePath,
     );
 
     // Additional validation: Check for invalid /public/val/ paths (directory without filename)
@@ -729,7 +732,7 @@ async function validateTextDocumentInternal(
       uriToFsPath(textDocument.uri),
       text,
       ts.ScriptTarget.ES2015,
-      true
+      true,
     );
 
     function checkInvalidPaths(node: ts.Node) {
@@ -763,10 +766,10 @@ async function validateTextDocumentInternal(
               pathValue !== "/public/val"
             ) {
               const start = sourceFile.getLineAndCharacterOfPosition(
-                firstArg.getStart()
+                firstArg.getStart(),
               );
               const end = sourceFile.getLineAndCharacterOfPosition(
-                firstArg.getEnd()
+                firstArg.getEnd(),
               );
 
               const diagnostic: Diagnostic = {
@@ -791,10 +794,10 @@ async function validateTextDocumentInternal(
               (pathValue.startsWith("/public/val/") && pathValue.endsWith("/"))
             ) {
               const start = sourceFile.getLineAndCharacterOfPosition(
-                firstArg.getStart()
+                firstArg.getStart(),
               );
               const end = sourceFile.getLineAndCharacterOfPosition(
-                firstArg.getEnd()
+                firstArg.getEnd(),
               );
 
               const diagnostic: Diagnostic = {
@@ -850,22 +853,22 @@ async function validateTextDocumentInternal(
           uriToFsPath(textDocument.uri),
           text,
           ts.ScriptTarget.ES2015,
-          true
-        )
+          true,
+        ),
       );
 
       for (const [sourcePath, value] of Object.entries(errors.validation)) {
         if (value) {
           for (const error of value) {
             const [_, modulePath] = Internal.splitModuleFilePathAndModulePath(
-              sourcePath as SourcePath
+              sourcePath as SourcePath,
             );
             let range =
               modulePathMap && getModulePathRange(modulePath, modulePathMap);
             if (range && modulePathMap) {
               const valRange = getModulePathRange(
                 modulePath + '."val"',
-                modulePathMap
+                modulePathMap,
               );
               if (valRange) {
                 range = valRange;
@@ -886,7 +889,7 @@ async function validateTextDocumentInternal(
                   const { source: sourceAtPath } = Internal.resolvePath(
                     modulePath,
                     source,
-                    schema
+                    schema,
                   );
                   const ref = (sourceAtPath as FileSource)[FILE_REF_PROP];
                   const absFilePath = path.join(valRoot, ...ref.split("/"));
@@ -908,7 +911,7 @@ async function validateTextDocumentInternal(
                 } catch (err) {
                   console.error(
                     `[ERROR] Failed to resolve path for modulePath: ${modulePath}`,
-                    err
+                    err,
                   );
                   // Don't crash - just skip this diagnostic
                   continue;
@@ -925,23 +928,23 @@ async function validateTextDocumentInternal(
               ) {
                 const addMetadataFix = error.fixes?.find(
                   (fix) =>
-                    fix === "image:add-metadata" || fix === "file:add-metadata"
+                    fix === "image:add-metadata" || fix === "file:add-metadata",
                 );
                 const keyOfFix = error.fixes?.find(
-                  (fix) => fix === "keyof:check-keys"
+                  (fix) => fix === "keyof:check-keys",
                 );
                 const routerFix = error.fixes?.find(
-                  (fix) => fix === "router:check-route"
+                  (fix) => fix === "router:check-route",
                 );
                 const uploadRemoteFileFix = error.fixes?.find(
                   (fix) =>
                     fix === "file:upload-remote" ||
-                    fix === "image:upload-remote"
+                    fix === "image:upload-remote",
                 );
                 const downloadRemoteFileFix = error.fixes?.find(
                   (fix) =>
                     fix === "file:download-remote" ||
-                    fix === "image:download-remote"
+                    fix === "image:download-remote",
                 );
                 const diagnostic: Diagnostic = {
                   severity: DiagnosticSeverity.Warning,
@@ -962,11 +965,11 @@ async function validateTextDocumentInternal(
                     const sourcePath = error.value.sourcePath;
                     const [moduleFilePath, modulePath] =
                       Internal.splitModuleFilePathAndModulePath(
-                        sourcePath as SourcePath
+                        sourcePath as SourcePath,
                       );
                     const refModule = await service.read(
                       moduleFilePath,
-                      modulePath
+                      modulePath,
                     );
                     const res = checkKeyOf(key, refModule);
                     if (res.error) {
@@ -975,7 +978,7 @@ async function validateTextDocumentInternal(
                     }
                   } else {
                     console.error(
-                      "Expected error.value to be an object with key property and sourcePath property"
+                      "Expected error.value to be an object with key property and sourcePath property",
                     );
                     // NOTE: this ignores error
                   }
@@ -985,7 +988,7 @@ async function validateTextDocumentInternal(
                     "[DEBUG router:check-route] error.value:",
                     error.value,
                     "type:",
-                    typeof error.value
+                    typeof error.value,
                   );
 
                   // Extract route and patterns from error.value
@@ -1024,7 +1027,7 @@ async function validateTextDocumentInternal(
                     console.error(
                       "[ERROR router:check-route] Expected error.value to be a string or object with route property, but got:",
                       typeof error.value,
-                      error.value
+                      error.value,
                     );
                     // NOTE: this ignores error - same as keyof:check-keys handling
                     continue;
@@ -1036,7 +1039,7 @@ async function validateTextDocumentInternal(
                     "include:",
                     include,
                     "exclude:",
-                    exclude
+                    exclude,
                   );
 
                   // Validate route existence and patterns
@@ -1044,12 +1047,12 @@ async function validateTextDocumentInternal(
                     route,
                     include,
                     exclude,
-                    service
+                    service,
                   );
 
                   console.log(
                     "[DEBUG router:check-route] Validation result:",
-                    validationResult
+                    validationResult,
                   );
 
                   if (validationResult.error) {
@@ -1079,7 +1082,7 @@ async function validateTextDocumentInternal(
                         "Expected filePath to be a string, but found " +
                           typeof filePath,
                         "in",
-                        JSON.stringify(source)
+                        JSON.stringify(source),
                       );
                       continue;
                     }
@@ -1091,7 +1094,7 @@ async function validateTextDocumentInternal(
                         "Expected schema to be a file or image, but found " +
                           resolvedSchemaAtPath.type,
                         "in",
-                        JSON.stringify(source)
+                        JSON.stringify(source),
                       );
                       return;
                     }
@@ -1116,14 +1119,14 @@ async function validateTextDocumentInternal(
                       } else {
                         console.error(
                           "Failed to load @valbuild/core from user's project: Internal export not found. " +
-                            "Make sure @valbuild/core is installed in your project."
+                            "Make sure @valbuild/core is installed in your project.",
                         );
                         continue;
                       }
                     } catch (err) {
                       console.error(
                         "Failed to load @valbuild/core from user's project:",
-                        err
+                        err,
                       );
                       continue;
                     }
@@ -1142,15 +1145,15 @@ async function validateTextDocumentInternal(
                     ) {
                       console.error(
                         "Failed to compute file hash: Internal.remote.getFileHash is not available. " +
-                          "The installed @valbuild/core version may be incompatible with this extension."
+                          "The installed @valbuild/core version may be incompatible with this extension.",
                       );
                       continue;
                     }
 
                     const fileHash = userInternal.remote.getFileHash(
                       fs.readFileSync(
-                        path.join(valRoot, ...filePath.split("/"))
-                      ) as Buffer
+                        path.join(valRoot, ...filePath.split("/")),
+                      ) as Buffer,
                     );
 
                     // Validate userInternal.remote.getValidationHash and VERSION.core exist
@@ -1163,7 +1166,7 @@ async function validateTextDocumentInternal(
                     ) {
                       console.error(
                         "Failed to compute validation hash: Internal.remote.getValidationHash is not available. " +
-                          "The installed @valbuild/core version may be incompatible with this extension."
+                          "The installed @valbuild/core version may be incompatible with this extension.",
                       );
                       continue;
                     }
@@ -1190,7 +1193,7 @@ async function validateTextDocumentInternal(
                         fileExt,
                         metadata,
                         fileHash,
-                        textEncoder
+                        textEncoder,
                       );
                     diagnostic.message =
                       "Expected remote file, but found local";
@@ -1198,7 +1201,7 @@ async function validateTextDocumentInternal(
                   } catch (err) {
                     console.error(
                       `[ERROR] Failed to resolve path for uploadRemoteFileFix - modulePath: ${modulePath}`,
-                      err
+                      err,
                     );
                     // Don't crash - just skip this diagnostic
                     continue;
@@ -1234,7 +1237,7 @@ async function validateTextDocumentInternal(
         const isInModules = isFileInValModulesAST(
           fsPath,
           valRoot,
-          valModulesFile
+          valModulesFile,
         );
         if (!isInModules) {
           const diagnostic: Diagnostic = {
@@ -1275,7 +1278,7 @@ function checkKeyOf(
     source?: Source;
     schema?: SerializedSchema;
     path: SourcePath;
-  }
+  },
 ):
   | {
       error: true;
@@ -1354,7 +1357,7 @@ connection.onDidChangeWatchedFiles((_change) => {
 // This handler provides the initial list of the completion items.
 connection.onCompletion(
   async (
-    textDocumentPosition: TextDocumentPositionParams
+    textDocumentPosition: TextDocumentPositionParams,
   ): Promise<CompletionItem[]> => {
     const document = documents.get(textDocumentPosition.textDocument.uri);
     if (!document) {
@@ -1362,7 +1365,7 @@ connection.onCompletion(
     }
 
     const fsPath = decodeURIComponent(
-      uriToFsPath(textDocumentPosition.textDocument.uri)
+      uriToFsPath(textDocumentPosition.textDocument.uri),
     );
 
     // Only provide completion for .val.ts or .val.js files
@@ -1388,7 +1391,7 @@ connection.onCompletion(
       fsPath,
       text,
       ts.ScriptTarget.Latest,
-      true
+      true,
     );
 
     // Detect the completion context
@@ -1406,13 +1409,13 @@ connection.onCompletion(
     if (context.type !== "none") {
       console.log(
         "[onCompletion] Getting completion items for type:",
-        context.type
+        context.type,
       );
       const items = await completionProviderRegistry.getCompletionItems(
         context,
         service,
         valRoot,
-        sourceFile
+        sourceFile,
       );
       console.log("[onCompletion] Returning", items.length, "items");
       return items;
@@ -1420,7 +1423,7 @@ connection.onCompletion(
 
     console.log("[onCompletion] No completion context detected");
     return [];
-  }
+  },
 );
 
 // This handler resolves additional information for the item selected in
@@ -1471,7 +1474,7 @@ connection.onCompletionResolve(
                 "temp.ts",
                 `const x = ${item.data.existingMetadataText}`,
                 ts.ScriptTarget.Latest,
-                true
+                true,
               );
 
               // Find the object literal
@@ -1520,8 +1523,8 @@ connection.onCompletionResolve(
                 ts.factory.createIdentifier(key),
                 typeof value === "number"
                   ? ts.factory.createNumericLiteral(value)
-                  : ts.factory.createStringLiteral(value)
-              )
+                  : ts.factory.createStringLiteral(value),
+              ),
             ),
             // Then, add preserved custom properties
             ...Object.entries(existingCustomProps).map(([key, valueText]) => {
@@ -1530,7 +1533,7 @@ connection.onCompletionResolve(
                 "temp-value.ts",
                 `const x = ${valueText}`,
                 ts.ScriptTarget.Latest,
-                true
+                true,
               );
               const tempVar = tempSource.statements[0] as ts.VariableStatement;
               const tempInit =
@@ -1540,7 +1543,7 @@ connection.onCompletionResolve(
                 console.error(`Failed to parse value for ${key}: ${valueText}`);
                 return ts.factory.createPropertyAssignment(
                   ts.factory.createIdentifier(key),
-                  ts.factory.createStringLiteral(valueText)
+                  ts.factory.createStringLiteral(valueText),
                 );
               }
 
@@ -1561,21 +1564,21 @@ connection.onCompletionResolve(
               } else {
                 // For complex expressions (objects, arrays, etc.), fallback to identifier
                 console.warn(
-                  `Complex value for ${key}, may not serialize correctly: ${valueText}`
+                  `Complex value for ${key}, may not serialize correctly: ${valueText}`,
                 );
                 freshNode = ts.factory.createIdentifier(valueText);
               }
 
               return ts.factory.createPropertyAssignment(
                 ts.factory.createIdentifier(key),
-                freshNode
+                freshNode,
               );
             }),
           ];
 
           const metadataObject = ts.factory.createObjectLiteralExpression(
             metadataProperties,
-            true // multiline
+            true, // multiline
           );
 
           // Print the metadata object to text
@@ -1587,12 +1590,12 @@ connection.onCompletionResolve(
             "",
             ts.ScriptTarget.Latest,
             false,
-            ts.ScriptKind.TS
+            ts.ScriptKind.TS,
           );
           const metadataText = printer.printNode(
             ts.EmitHint.Unspecified,
             metadataObject,
-            sourceFile
+            sourceFile,
           );
 
           // Add additionalTextEdits to insert metadata after the file path
@@ -1617,7 +1620,7 @@ connection.onCompletionResolve(
                     line: secondArgRange.end.line,
                     character: secondArgRange.end.character,
                   },
-                })
+                }),
               );
             }
 
@@ -1628,8 +1631,8 @@ connection.onCompletionResolve(
                   line: range.end.line,
                   character: range.end.character + 1, // +1 to be after the closing quote
                 },
-                `, ${metadataText}`
-              )
+                `, ${metadataText}`,
+              ),
             );
 
             item.additionalTextEdits = edits;
@@ -1642,7 +1645,7 @@ connection.onCompletionResolve(
                 customPropsCount > 0
                   ? ` (preserved ${customPropsCount} custom properties)`
                   : ""
-              }: ${metadataText}`
+              }: ${metadataText}`,
             );
           }
         }
@@ -1653,7 +1656,7 @@ connection.onCompletionResolve(
     }
 
     return item;
-  }
+  },
 );
 
 // Code action handler for automatic fixes
@@ -1682,7 +1685,7 @@ connection.onCodeAction((params) => {
           valModulesFile,
           valModulesContent,
           ts.ScriptTarget.Latest,
-          true
+          true,
         );
 
         let insertPosition: { line: number; character: number } | null = null;
@@ -1705,7 +1708,7 @@ connection.onCodeAction((params) => {
                   const lastElement =
                     firstArg.elements[firstArg.elements.length - 1];
                   const pos = sourceFile.getLineAndCharacterOfPosition(
-                    lastElement.end
+                    lastElement.end,
                   );
                   insertPosition = pos;
 
@@ -1713,13 +1716,13 @@ connection.onCodeAction((params) => {
                   const firstElement = firstArg.elements[0];
                   const firstElementPos =
                     sourceFile.getLineAndCharacterOfPosition(
-                      firstElement.getStart(sourceFile)
+                      firstElement.getStart(sourceFile),
                     );
                   indentation = " ".repeat(firstElementPos.character);
                 } else {
                   // Empty array - insert at array start
                   const arrayStart = sourceFile.getLineAndCharacterOfPosition(
-                    firstArg.getStart(sourceFile) + 1 // After the '['
+                    firstArg.getStart(sourceFile) + 1, // After the '['
                   );
                   insertPosition = arrayStart;
                 }
@@ -1768,7 +1771,7 @@ connection.onCodeAction((params) => {
       } catch (error) {
         console.error(
           "Failed to create code action for missing module:",
-          error
+          error,
         );
       }
     }

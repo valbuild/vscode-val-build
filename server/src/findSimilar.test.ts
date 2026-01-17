@@ -30,11 +30,11 @@ describe("findSimilar", () => {
 
   it("should sort by increasing distance", () => {
     const result = findSimilar("abc", ["xyz", "xbc", "abc", "aaa"]);
-    
+
     // abc -> abc = 0
     assert.strictEqual(result[0].target, "abc");
     assert.strictEqual(result[0].distance, 0);
-    
+
     // Verify distances are increasing
     for (let i = 1; i < result.length; i++) {
       assert.ok(result[i].distance >= result[i - 1].distance);

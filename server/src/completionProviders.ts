@@ -24,7 +24,7 @@ import { PublicValFilesCache } from "./publicValFilesCache";
  * Get sourcePath from a keyOf schema
  */
 function getKeyOfSourcePath(
-  schema: SerializedSchema | undefined
+  schema: SerializedSchema | undefined,
 ): string | undefined {
   if (!schema) return undefined;
 
@@ -62,7 +62,7 @@ export interface CompletionProvider {
     context: CompletionContext,
     service: ValService,
     valRoot: string,
-    sourceFile?: ts.SourceFile
+    sourceFile?: ts.SourceFile,
   ): Promise<CompletionItem[]>;
 }
 
@@ -77,7 +77,7 @@ export class RouteCompletionProvider implements CompletionProvider {
     context: CompletionContext,
     service: ValService,
     valRoot: string,
-    sourceFile?: ts.SourceFile
+    sourceFile?: ts.SourceFile,
   ): Promise<CompletionItem[]> {
     try {
       console.log("[RouteCompletionProvider] Starting completion");
@@ -117,11 +117,11 @@ export class RouteCompletionProvider implements CompletionProvider {
       // Get the schema for this specific field (handles nested fields)
       const fieldSchema = this.getFieldSchemaRecursive(
         result.schema,
-        fieldName
+        fieldName,
       );
       console.log(
         "[RouteCompletionProvider] Field schema type:",
-        fieldSchema?.type
+        fieldSchema?.type,
       );
 
       if (!fieldSchema || fieldSchema.type !== "route") {
@@ -147,7 +147,7 @@ export class RouteCompletionProvider implements CompletionProvider {
       console.log(
         "[RouteCompletionProvider] Found",
         allModules.length,
-        "total modules"
+        "total modules",
       );
 
       // Find modules with routers and collect their routes (use Set for deduplication)
@@ -169,7 +169,7 @@ export class RouteCompletionProvider implements CompletionProvider {
             "[RouteCompletionProvider] Found router module:",
             module.path,
             "with routes:",
-            routes
+            routes,
           );
           for (const route of routes) {
             routesSet.add(route);
@@ -182,19 +182,19 @@ export class RouteCompletionProvider implements CompletionProvider {
       console.log(
         "[RouteCompletionProvider] Total unique routes collected:",
         allRoutes.length,
-        allRoutes
+        allRoutes,
       );
 
       // Filter routes by include/exclude patterns
       const filteredRoutes = filterRoutesByPatterns(
         allRoutes,
         includePattern,
-        excludePattern
+        excludePattern,
       );
       console.log(
         "[RouteCompletionProvider] Filtered routes:",
         filteredRoutes.length,
-        filteredRoutes
+        filteredRoutes,
       );
 
       // Calculate the range to replace (the entire string content, excluding quotes)
@@ -212,7 +212,7 @@ export class RouteCompletionProvider implements CompletionProvider {
 
         replaceRange = Range.create(
           Position.create(startPos.line, startPos.character),
-          Position.create(endPos.line, endPos.character)
+          Position.create(endPos.line, endPos.character),
         );
       }
 
@@ -236,7 +236,7 @@ export class RouteCompletionProvider implements CompletionProvider {
       console.log(
         "[RouteCompletionProvider] Returning",
         items.length,
-        "completion items"
+        "completion items",
       );
       return items;
     } catch (error) {
@@ -250,7 +250,7 @@ export class RouteCompletionProvider implements CompletionProvider {
    */
   private findFieldName(
     stringNode: ts.StringLiteral,
-    sourceFile: ts.SourceFile
+    sourceFile: ts.SourceFile,
   ): string | undefined {
     // Walk up the AST to find the property assignment
     let parent = stringNode.parent;
@@ -273,7 +273,7 @@ export class RouteCompletionProvider implements CompletionProvider {
    */
   private getFieldSchema(
     schema: SerializedSchema,
-    fieldName: string
+    fieldName: string,
   ): SerializedSchema | undefined {
     if (schema.type === "object") {
       const items = "items" in schema ? schema.items : undefined;
@@ -291,11 +291,11 @@ export class RouteCompletionProvider implements CompletionProvider {
   private getFieldSchemaRecursive(
     schema: SerializedSchema,
     fieldName: string,
-    depth: number = 0
+    depth: number = 0,
   ): SerializedSchema | undefined {
     const indent = "  ".repeat(depth);
     console.log(
-      `${indent}[RouteCompletionProvider.recurse] type: ${schema.type}, looking for: "${fieldName}"`
+      `${indent}[RouteCompletionProvider.recurse] type: ${schema.type}, looking for: "${fieldName}"`,
     );
 
     // Check if this is an object with the field
@@ -312,7 +312,7 @@ export class RouteCompletionProvider implements CompletionProvider {
           const result = this.getFieldSchemaRecursive(
             items[key] as SerializedSchema,
             fieldName,
-            depth + 1
+            depth + 1,
           );
           if (result) return result;
         }
@@ -327,7 +327,7 @@ export class RouteCompletionProvider implements CompletionProvider {
         return this.getFieldSchemaRecursive(
           item as SerializedSchema,
           fieldName,
-          depth + 1
+          depth + 1,
         );
       }
     }
@@ -340,7 +340,7 @@ export class RouteCompletionProvider implements CompletionProvider {
         return this.getFieldSchemaRecursive(
           item as SerializedSchema,
           fieldName,
-          depth + 1
+          depth + 1,
         );
       }
     }
@@ -354,25 +354,25 @@ export class RouteCompletionProvider implements CompletionProvider {
 
       if (unionItems && Array.isArray(unionItems)) {
         console.log(
-          `${indent}  Union with ${unionItems.length} items, searching each`
+          `${indent}  Union with ${unionItems.length} items, searching each`,
         );
         for (let i = 0; i < unionItems.length; i++) {
           const option = unionItems[i];
           console.log(
             `${indent}  Searching union item ${i + 1}/${
               unionItems.length
-            } (type: ${(option as SerializedSchema).type})`
+            } (type: ${(option as SerializedSchema).type})`,
           );
           const result = this.getFieldSchemaRecursive(
             option as SerializedSchema,
             fieldName,
-            depth + 1
+            depth + 1,
           );
           if (result) return result;
         }
       } else {
         console.log(
-          `${indent}  ⚠️  Union doesn't have valid options/items array!`
+          `${indent}  ⚠️  Union doesn't have valid options/items array!`,
         );
       }
     }
@@ -392,7 +392,7 @@ export class KeyOfCompletionProvider implements CompletionProvider {
     context: CompletionContext,
     service: ValService,
     valRoot: string,
-    sourceFile?: ts.SourceFile
+    sourceFile?: ts.SourceFile,
   ): Promise<CompletionItem[]> {
     try {
       if (!context.modulePath || !context.stringNode || !sourceFile) {
@@ -417,7 +417,7 @@ export class KeyOfCompletionProvider implements CompletionProvider {
       // Get the schema for this specific field (handles nested fields)
       const fieldSchema = this.getFieldSchemaRecursive(
         result.schema,
-        fieldName
+        fieldName,
       );
 
       if (!fieldSchema || fieldSchema.type !== "keyOf") {
@@ -463,7 +463,7 @@ export class KeyOfCompletionProvider implements CompletionProvider {
 
         replaceRange = Range.create(
           Position.create(startPos.line, startPos.character),
-          Position.create(endPos.line, endPos.character)
+          Position.create(endPos.line, endPos.character),
         );
       }
 
@@ -496,7 +496,7 @@ export class KeyOfCompletionProvider implements CompletionProvider {
    */
   private findFieldName(
     stringNode: ts.StringLiteral,
-    sourceFile: ts.SourceFile
+    sourceFile: ts.SourceFile,
   ): string | undefined {
     // Walk up the AST to find the property assignment
     let parent = stringNode.parent;
@@ -519,7 +519,7 @@ export class KeyOfCompletionProvider implements CompletionProvider {
    */
   private getFieldSchema(
     schema: SerializedSchema,
-    fieldName: string
+    fieldName: string,
   ): SerializedSchema | undefined {
     if (schema.type === "object") {
       const items = "items" in schema ? schema.items : undefined;
@@ -536,7 +536,7 @@ export class KeyOfCompletionProvider implements CompletionProvider {
    */
   private getFieldSchemaRecursive(
     schema: SerializedSchema,
-    fieldName: string
+    fieldName: string,
   ): SerializedSchema | undefined {
     // Check if this is an object with the field
     if (schema.type === "object") {
@@ -549,7 +549,7 @@ export class KeyOfCompletionProvider implements CompletionProvider {
         for (const key in items) {
           const result = this.getFieldSchemaRecursive(
             items[key] as SerializedSchema,
-            fieldName
+            fieldName,
           );
           if (result) return result;
         }
@@ -562,7 +562,7 @@ export class KeyOfCompletionProvider implements CompletionProvider {
       if (item) {
         return this.getFieldSchemaRecursive(
           item as SerializedSchema,
-          fieldName
+          fieldName,
         );
       }
     }
@@ -573,7 +573,7 @@ export class KeyOfCompletionProvider implements CompletionProvider {
       if (item) {
         return this.getFieldSchemaRecursive(
           item as SerializedSchema,
-          fieldName
+          fieldName,
         );
       }
     }
@@ -588,7 +588,7 @@ export class KeyOfCompletionProvider implements CompletionProvider {
         for (const option of unionItems) {
           const result = this.getFieldSchemaRecursive(
             option as SerializedSchema,
-            fieldName
+            fieldName,
           );
           if (result) return result;
         }
@@ -615,14 +615,14 @@ export class ImagePathCompletionProvider implements CompletionProvider {
     context: CompletionContext,
     service: ValService,
     valRoot: string,
-    sourceFile?: ts.SourceFile
+    sourceFile?: ts.SourceFile,
   ): Promise<CompletionItem[]> {
     console.log("[ImagePathCompletionProvider] Starting completion");
 
     // Get all files from /public/val directory
     const files = this.cache.getFiles(valRoot);
     console.log(
-      `[ImagePathCompletionProvider] Found ${files.length} files in cache`
+      `[ImagePathCompletionProvider] Found ${files.length} files in cache`,
     );
 
     // Filter to image files only (common image extensions)
@@ -638,11 +638,11 @@ export class ImagePathCompletionProvider implements CompletionProvider {
       ".bmp",
     ];
     const imageFiles = files.filter((file) =>
-      imageExtensions.some((ext) => file.toLowerCase().endsWith(ext))
+      imageExtensions.some((ext) => file.toLowerCase().endsWith(ext)),
     );
 
     console.log(
-      `[ImagePathCompletionProvider] Found ${imageFiles.length} image files`
+      `[ImagePathCompletionProvider] Found ${imageFiles.length} image files`,
     );
 
     // Create completion items
@@ -662,18 +662,18 @@ export class ImagePathCompletionProvider implements CompletionProvider {
       // Add textEdit to replace the entire string if we have the string node
       if (context.stringNode && sourceFile) {
         const start = sourceFile.getLineAndCharacterOfPosition(
-          context.stringNode.getStart() + 1
+          context.stringNode.getStart() + 1,
         ); // +1 to skip opening quote
         const end = sourceFile.getLineAndCharacterOfPosition(
-          context.stringNode.getEnd() - 1
+          context.stringNode.getEnd() - 1,
         ); // -1 to skip closing quote
 
         item.textEdit = TextEdit.replace(
           Range.create(
             Position.create(start.line, start.character),
-            Position.create(end.line, end.character)
+            Position.create(end.line, end.character),
           ),
-          file
+          file,
         );
       }
 
@@ -682,10 +682,10 @@ export class ImagePathCompletionProvider implements CompletionProvider {
         const secondArg = context.callExpression.arguments[1];
         if (secondArg) {
           const start = sourceFile.getLineAndCharacterOfPosition(
-            secondArg.getStart(sourceFile)
+            secondArg.getStart(sourceFile),
           );
           const end = sourceFile.getLineAndCharacterOfPosition(
-            secondArg.getEnd()
+            secondArg.getEnd(),
           );
           item.data.secondArgumentRange = {
             start,
@@ -719,14 +719,14 @@ export class FilePathCompletionProvider implements CompletionProvider {
     context: CompletionContext,
     service: ValService,
     valRoot: string,
-    sourceFile?: ts.SourceFile
+    sourceFile?: ts.SourceFile,
   ): Promise<CompletionItem[]> {
     console.log("[FilePathCompletionProvider] Starting completion");
 
     // Get all files from /public/val directory
     const files = this.cache.getFiles(valRoot);
     console.log(
-      `[FilePathCompletionProvider] Found ${files.length} files in cache`
+      `[FilePathCompletionProvider] Found ${files.length} files in cache`,
     );
 
     // Create completion items for all files
@@ -746,18 +746,18 @@ export class FilePathCompletionProvider implements CompletionProvider {
       // Add textEdit to replace the entire string if we have the string node
       if (context.stringNode && sourceFile) {
         const start = sourceFile.getLineAndCharacterOfPosition(
-          context.stringNode.getStart() + 1
+          context.stringNode.getStart() + 1,
         ); // +1 to skip opening quote
         const end = sourceFile.getLineAndCharacterOfPosition(
-          context.stringNode.getEnd() - 1
+          context.stringNode.getEnd() - 1,
         ); // -1 to skip closing quote
 
         item.textEdit = TextEdit.replace(
           Range.create(
             Position.create(start.line, start.character),
-            Position.create(end.line, end.character)
+            Position.create(end.line, end.character),
           ),
-          file
+          file,
         );
       }
 
@@ -766,10 +766,10 @@ export class FilePathCompletionProvider implements CompletionProvider {
         const secondArg = context.callExpression.arguments[1];
         if (secondArg) {
           const start = sourceFile.getLineAndCharacterOfPosition(
-            secondArg.getStart(sourceFile)
+            secondArg.getStart(sourceFile),
           );
           const end = sourceFile.getLineAndCharacterOfPosition(
-            secondArg.getEnd()
+            secondArg.getEnd(),
           );
           item.data.secondArgumentRange = {
             start,
@@ -820,14 +820,14 @@ export class CompletionProviderRegistry {
     context: CompletionContext,
     service: ValService,
     valRoot: string,
-    sourceFile?: ts.SourceFile
+    sourceFile?: ts.SourceFile,
   ): Promise<CompletionItem[]> {
     const providers = this.providers.get(context.type);
     console.log(
       "[CompletionProviderRegistry] Found",
       providers?.length || 0,
       "providers for context type:",
-      context.type
+      context.type,
     );
 
     if (!providers || providers.length === 0) {
@@ -839,13 +839,13 @@ export class CompletionProviderRegistry {
     for (const provider of providers) {
       console.log(
         "[CompletionProviderRegistry] Calling provider:",
-        provider.constructor.name
+        provider.constructor.name,
       );
       const items = await provider.provideCompletionItems(
         context,
         service,
         valRoot,
-        sourceFile
+        sourceFile,
       );
       allItems.push(...items);
     }

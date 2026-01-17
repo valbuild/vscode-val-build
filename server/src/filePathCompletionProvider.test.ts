@@ -43,7 +43,7 @@ export default c.define("/test.val.ts", s.file(), c.file(""));
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Find the empty string literal
@@ -69,7 +69,7 @@ export default c.define("/test.val.ts", s.file(), c.file(""));
         context,
         service,
         fixtureRoot,
-        sourceFile
+        sourceFile,
       );
 
       // Should return all files (images and non-images)
@@ -104,14 +104,14 @@ export default c.define("/test.val.ts", s.file(), c.file(""));
       for (const expectedFile of expectedFiles) {
         assert.ok(
           labels.includes(expectedFile),
-          `Should include ${expectedFile}`
+          `Should include ${expectedFile}`,
         );
       }
 
       // Verify count (might have extra test files from other tests running in parallel)
       assert.ok(
         items.length >= expectedFiles.length,
-        `Should have at least ${expectedFiles.length} files, got ${items.length}`
+        `Should have at least ${expectedFiles.length} files, got ${items.length}`,
       );
 
       cache.dispose();
@@ -133,7 +133,7 @@ export default c.define("/test.val.ts", s.file(), c.file("/old/path.pdf"));
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Find the string literal
@@ -159,7 +159,7 @@ export default c.define("/test.val.ts", s.file(), c.file("/old/path.pdf"));
         context,
         service,
         fixtureRoot,
-        sourceFile
+        sourceFile,
       );
 
       // All items should have textEdit
@@ -169,7 +169,7 @@ export default c.define("/test.val.ts", s.file(), c.file("/old/path.pdf"));
           // Verify it replaces with the full path
           assert.ok(
             item.textEdit.newText.startsWith("/public/val/"),
-            "Should replace with full path"
+            "Should replace with full path",
           );
         }
       }
@@ -193,7 +193,7 @@ export default c.define("/test.val.ts", s.file(), c.file(""));
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       let stringNode: ts.StringLiteral | undefined;
@@ -216,7 +216,7 @@ export default c.define("/test.val.ts", s.file(), c.file(""));
         context,
         service,
         fixtureRoot,
-        sourceFile
+        sourceFile,
       );
 
       // Check first item properties
@@ -224,16 +224,16 @@ export default c.define("/test.val.ts", s.file(), c.file(""));
       assert.strictEqual(
         firstItem.kind,
         CompletionItemKind.File,
-        "Should be of kind File"
+        "Should be of kind File",
       );
       assert.strictEqual(
         firstItem.detail,
         "File from /public/val",
-        "Should have correct detail"
+        "Should have correct detail",
       );
       assert.ok(
         firstItem.label.startsWith("/public/val/"),
-        "Label should start with /public/val/"
+        "Label should start with /public/val/",
       );
 
       // Check that items have data field for resolve
@@ -241,7 +241,7 @@ export default c.define("/test.val.ts", s.file(), c.file(""));
       assert.strictEqual(
         firstItem.data.type,
         "file",
-        "Data type should be file"
+        "Data type should be file",
       );
       assert.ok(firstItem.data.filePath, "Should have filePath in data");
       assert.ok(firstItem.data.valRoot, "Should have valRoot in data");
@@ -266,7 +266,7 @@ export default c.define("/test.val.ts", s.file(), c.file(""));
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       let stringNode: ts.StringLiteral | undefined;
@@ -289,7 +289,7 @@ export default c.define("/test.val.ts", s.file(), c.file(""));
         context,
         service,
         emptyRoot,
-        sourceFile
+        sourceFile,
       );
 
       assert.strictEqual(items.length, 0, "Should return empty array");
@@ -314,7 +314,7 @@ export default c.define("/test.val.ts", s.file(), c.file(""));
       const items = await provider.provideCompletionItems(
         context,
         service,
-        fixtureRoot
+        fixtureRoot,
       );
 
       // Should still return items, but without textEdit
@@ -338,7 +338,7 @@ export default c.define("/test.val.ts", s.file(), c.file(""));
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       let stringNode: ts.StringLiteral | undefined;
@@ -361,7 +361,7 @@ export default c.define("/test.val.ts", s.file(), c.file(""));
         context,
         service,
         fixtureRoot,
-        sourceFile
+        sourceFile,
       );
 
       const labels = items.map((item) => item.label);
@@ -369,29 +369,29 @@ export default c.define("/test.val.ts", s.file(), c.file(""));
       // Should include image files
       assert.ok(
         labels.includes("/public/val/logo.png"),
-        "Should include PNG image"
+        "Should include PNG image",
       );
       assert.ok(
         labels.includes("/public/val/icon.svg"),
-        "Should include SVG image"
+        "Should include SVG image",
       );
 
       // Should include non-image files
       assert.ok(
         labels.includes("/public/val/styles.css"),
-        "Should include CSS file"
+        "Should include CSS file",
       );
       assert.ok(
         labels.includes("/public/val/data.json"),
-        "Should include JSON file"
+        "Should include JSON file",
       );
       assert.ok(
         labels.includes("/public/val/document.pdf"),
-        "Should include PDF file"
+        "Should include PDF file",
       );
       assert.ok(
         labels.includes("/public/val/script.js"),
-        "Should include JS file"
+        "Should include JS file",
       );
 
       cache.dispose();
@@ -412,7 +412,7 @@ export default c.define("/test.val.ts", s.file(), c.file(""));
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       let stringNode: ts.StringLiteral | undefined;
@@ -435,7 +435,7 @@ export default c.define("/test.val.ts", s.file(), c.file(""));
         context,
         service,
         fixtureRoot,
-        sourceFile
+        sourceFile,
       );
 
       const labels = items.map((item) => item.label);
@@ -443,15 +443,15 @@ export default c.define("/test.val.ts", s.file(), c.file(""));
       // Should include files from nested directories
       assert.ok(
         labels.includes("/public/val/images/product1.png"),
-        "Should include file from images/ directory"
+        "Should include file from images/ directory",
       );
       assert.ok(
         labels.includes("/public/val/documents/manual.pdf"),
-        "Should include file from documents/ directory"
+        "Should include file from documents/ directory",
       );
       assert.ok(
         labels.includes("/public/val/nested/deep/deep-image.png"),
-        "Should include file from deeply nested directory"
+        "Should include file from deeply nested directory",
       );
 
       cache.dispose();

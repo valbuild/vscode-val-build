@@ -87,7 +87,7 @@ describe("tsRuntime", () => {
         },
       })));
       `,
-      path.join(fixtureRoot, "<system>.ts")
+      path.join(fixtureRoot, "<system>.ts"),
     );
 
     // The module exports a Promise as default, so await it
@@ -98,7 +98,7 @@ describe("tsRuntime", () => {
 
 function readFakeFiles(
   dir: string,
-  root: string
+  root: string,
 ): {
   files: Record<string, string>;
   directories: Map<string, string[]>;
@@ -112,7 +112,7 @@ function readFakeFiles(
       if (fs.statSync(filePath).isDirectory()) {
         directories.set(
           path.join(root, file),
-          recursiveRead(filePath, path.join(root, file))
+          recursiveRead(filePath, path.join(root, file)),
         );
       } else {
         files[path.join(root, file)] = fs.readFileSync(filePath, "utf-8");

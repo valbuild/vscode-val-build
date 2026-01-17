@@ -43,7 +43,7 @@ export default c.define("/test.val.ts", s.image(), c.image(""));
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Find the empty string literal
@@ -69,7 +69,7 @@ export default c.define("/test.val.ts", s.image(), c.image(""));
         context,
         service,
         fixtureRoot,
-        sourceFile
+        sourceFile,
       );
 
       // Should only return image files (png, jpg, svg, etc.)
@@ -95,36 +95,36 @@ export default c.define("/test.val.ts", s.image(), c.image(""));
       for (const expectedImage of expectedImages) {
         assert.ok(
           labels.includes(expectedImage),
-          `Should include ${expectedImage}`
+          `Should include ${expectedImage}`,
         );
       }
 
       // Should NOT include non-image files
       assert.ok(
         !labels.includes("/public/val/styles.css"),
-        "Should not include CSS file"
+        "Should not include CSS file",
       );
       assert.ok(
         !labels.includes("/public/val/data.json"),
-        "Should not include JSON file"
+        "Should not include JSON file",
       );
       assert.ok(
         !labels.includes("/public/val/document.pdf"),
-        "Should not include PDF file"
+        "Should not include PDF file",
       );
       assert.ok(
         !labels.includes("/public/val/script.js"),
-        "Should not include JS file"
+        "Should not include JS file",
       );
       assert.ok(
         !labels.includes("/public/val/README.md"),
-        "Should not include MD file"
+        "Should not include MD file",
       );
 
       // Verify count (might have extra test files from other tests running in parallel)
       assert.ok(
         items.length >= expectedImages.length,
-        `Should have at least ${expectedImages.length} image files, got ${items.length}`
+        `Should have at least ${expectedImages.length} image files, got ${items.length}`,
       );
 
       cache.dispose();
@@ -146,7 +146,7 @@ export default c.define("/test.val.ts", s.image(), c.image("/old/path.png"));
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Find the string literal
@@ -172,7 +172,7 @@ export default c.define("/test.val.ts", s.image(), c.image("/old/path.png"));
         context,
         service,
         fixtureRoot,
-        sourceFile
+        sourceFile,
       );
 
       // All items should have textEdit
@@ -182,7 +182,7 @@ export default c.define("/test.val.ts", s.image(), c.image("/old/path.png"));
           // Verify it replaces with the full path
           assert.ok(
             item.textEdit.newText.startsWith("/public/val/"),
-            "Should replace with full path"
+            "Should replace with full path",
           );
         }
       }
@@ -206,7 +206,7 @@ export default c.define("/test.val.ts", s.image(), c.image(""));
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       let stringNode: ts.StringLiteral | undefined;
@@ -229,7 +229,7 @@ export default c.define("/test.val.ts", s.image(), c.image(""));
         context,
         service,
         fixtureRoot,
-        sourceFile
+        sourceFile,
       );
 
       // Check first item properties
@@ -237,16 +237,16 @@ export default c.define("/test.val.ts", s.image(), c.image(""));
       assert.strictEqual(
         firstItem.kind,
         CompletionItemKind.File,
-        "Should be of kind File"
+        "Should be of kind File",
       );
       assert.strictEqual(
         firstItem.detail,
         "Image file from /public/val",
-        "Should have correct detail"
+        "Should have correct detail",
       );
       assert.ok(
         firstItem.label.startsWith("/public/val/"),
-        "Label should start with /public/val/"
+        "Label should start with /public/val/",
       );
 
       // Check that items have data field for resolve
@@ -254,7 +254,7 @@ export default c.define("/test.val.ts", s.image(), c.image(""));
       assert.strictEqual(
         firstItem.data.type,
         "image",
-        "Data type should be image"
+        "Data type should be image",
       );
       assert.ok(firstItem.data.filePath, "Should have filePath in data");
       assert.ok(firstItem.data.valRoot, "Should have valRoot in data");
@@ -279,7 +279,7 @@ export default c.define("/test.val.ts", s.image(), c.image(""));
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       let stringNode: ts.StringLiteral | undefined;
@@ -302,7 +302,7 @@ export default c.define("/test.val.ts", s.image(), c.image(""));
         context,
         service,
         emptyRoot,
-        sourceFile
+        sourceFile,
       );
 
       assert.strictEqual(items.length, 0, "Should return empty array");
@@ -326,7 +326,7 @@ export default c.define("/test.val.ts", s.image(), c.image("", { width: 100, hei
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Find the string node and call expression
@@ -355,7 +355,7 @@ export default c.define("/test.val.ts", s.image(), c.image("", { width: 100, hei
       assert.ok(callExpression, "Should find call expression");
       assert.ok(
         callExpression!.arguments.length > 1,
-        "Should have second argument"
+        "Should have second argument",
       );
 
       const context: CompletionContext = {
@@ -371,7 +371,7 @@ export default c.define("/test.val.ts", s.image(), c.image("", { width: 100, hei
         context,
         service,
         fixtureRoot,
-        sourceFile
+        sourceFile,
       );
 
       assert.ok(items.length > 0, "Should return items");
@@ -379,19 +379,19 @@ export default c.define("/test.val.ts", s.image(), c.image("", { width: 100, hei
       assert.strictEqual(
         firstItem.data.hasSecondArgument,
         true,
-        "Should mark hasSecondArgument as true"
+        "Should mark hasSecondArgument as true",
       );
       assert.ok(
         firstItem.data.secondArgumentRange,
-        "Should have secondArgumentRange"
+        "Should have secondArgumentRange",
       );
       assert.ok(
         firstItem.data.secondArgumentRange.start,
-        "Should have start position"
+        "Should have start position",
       );
       assert.ok(
         firstItem.data.secondArgumentRange.end,
-        "Should have end position"
+        "Should have end position",
       );
 
       cache.dispose();
@@ -413,7 +413,7 @@ export default c.define("/test.val.ts", s.image(), c.image("", { width: 100, hei
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Find the string node and call expression
@@ -454,23 +454,23 @@ export default c.define("/test.val.ts", s.image(), c.image("", { width: 100, hei
         context,
         service,
         fixtureRoot,
-        sourceFile
+        sourceFile,
       );
 
       assert.ok(items.length > 0, "Should return items");
       const firstItem = items[0];
       assert.ok(
         firstItem.data.existingMetadataText,
-        "Should have existingMetadataText"
+        "Should have existingMetadataText",
       );
       // Verify the metadata text includes custom properties
       assert.ok(
         firstItem.data.existingMetadataText.includes("alt"),
-        "Should include alt property"
+        "Should include alt property",
       );
       assert.ok(
         firstItem.data.existingMetadataText.includes("customProp"),
-        "Should include customProp property"
+        "Should include customProp property",
       );
 
       cache.dispose();
@@ -493,7 +493,7 @@ export default c.define("/test.val.ts", s.image(), c.image("", { width: 100, hei
       const items = await provider.provideCompletionItems(
         context,
         service,
-        fixtureRoot
+        fixtureRoot,
       );
 
       // Should still return items, but without textEdit
@@ -525,7 +525,7 @@ export default c.define("/test.val.ts", s.image(), c.image(""));
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       let stringNode: ts.StringLiteral | undefined;
@@ -548,7 +548,7 @@ export default c.define("/test.val.ts", s.image(), c.image(""));
         context,
         service,
         fixtureRoot,
-        sourceFile
+        sourceFile,
       );
 
       // Check that only valid image extensions are included
@@ -565,11 +565,11 @@ export default c.define("/test.val.ts", s.image(), c.image(""));
 
       for (const item of items) {
         const hasValidExtension = validExtensions.some((ext) =>
-          item.label.toLowerCase().endsWith(ext)
+          item.label.toLowerCase().endsWith(ext),
         );
         assert.ok(
           hasValidExtension,
-          `${item.label} should have a valid image extension`
+          `${item.label} should have a valid image extension`,
         );
       }
 

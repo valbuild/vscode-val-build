@@ -28,7 +28,7 @@ describe("completionContext", () => {
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Position inside the "/main" string in the content object
@@ -50,7 +50,7 @@ describe("completionContext", () => {
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Position inside the "/test.val.ts" string (first argument)
@@ -69,7 +69,7 @@ describe("completionContext", () => {
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Position inside the "/path/to/image.png" string
@@ -89,7 +89,7 @@ describe("completionContext", () => {
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Position inside the "/path/to/file.pdf" string
@@ -107,7 +107,7 @@ describe("completionContext", () => {
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Position inside a regular string
@@ -125,7 +125,7 @@ describe("completionContext", () => {
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Position outside of any string (line 0, character 10 = after "default ")
@@ -143,7 +143,7 @@ describe("completionContext", () => {
         "test.val.ts",
         code,
         ts.ScriptTarget.Latest,
-        true
+        true,
       );
 
       // Position in the second argument (the "schema" string)

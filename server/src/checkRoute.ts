@@ -14,7 +14,7 @@ export async function checkRouteIsValid(
   route: string,
   include: SerializedRegExpPattern | undefined,
   exclude: SerializedRegExpPattern | undefined,
-  service: RouteValidationService
+  service: RouteValidationService,
 ): Promise<{ error: false } | { error: true; message: string }> {
   // 1. Get all modules with their source and schema
   const allModules = await service.getAllModules();
@@ -60,7 +60,7 @@ export async function checkRouteIsValid(
 
     // We have router modules, collect all routes
     let allRoutes = Object.values(routerModules).flatMap((source) =>
-      Object.keys(source)
+      Object.keys(source),
     );
 
     // Filter routes by include/exclude patterns for suggestions

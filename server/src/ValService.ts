@@ -15,7 +15,7 @@ export interface ValService {
       validate: boolean;
       source: boolean;
       schema: boolean;
-    }
+    },
   ) => Promise<
     | {
         source: Source;

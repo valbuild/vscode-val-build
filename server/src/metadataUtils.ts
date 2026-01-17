@@ -28,7 +28,7 @@ function normalizeMimeType(mimeType: string): string {
  * @returns Object containing width, height, and mimeType
  */
 export function getImageMetadata(
-  absoluteFilePath: string
+  absoluteFilePath: string,
 ): ImageMetadata | null {
   try {
     const buffer = readFileSync(absoluteFilePath);
@@ -55,14 +55,12 @@ export function getImageMetadata(
       };
     }
 
-    console.warn(
-      `Could not determine image metadata for: ${absoluteFilePath}`
-    );
+    console.warn(`Could not determine image metadata for: ${absoluteFilePath}`);
     return null;
   } catch (error) {
     console.error(
       `Error reading image metadata for ${absoluteFilePath}:`,
-      error
+      error,
     );
     return null;
   }
@@ -85,7 +83,10 @@ export function getFileMetadata(absoluteFilePath: string): FileMetadata | null {
     console.warn(`Could not determine MIME type for: ${absoluteFilePath}`);
     return null;
   } catch (error) {
-    console.error(`Error getting file metadata for ${absoluteFilePath}:`, error);
+    console.error(
+      `Error getting file metadata for ${absoluteFilePath}:`,
+      error,
+    );
     return null;
   }
 }

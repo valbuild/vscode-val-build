@@ -23,10 +23,10 @@ export interface ValModuleResult {
  */
 export function findValModulesFile(
   valRoot: string,
-  valModulesFiles: string[]
+  valModulesFiles: string[],
 ): string | undefined {
   return valModulesFiles.find((valModulesFile) =>
-    valModulesFile.startsWith(valRoot)
+    valModulesFile.startsWith(valRoot),
   );
 }
 
@@ -175,7 +175,7 @@ function findConfigFile(startPath: string): string | null {
  */
 export function createValModulesRuntime(
   host: ts.ParseConfigHost,
-  configPath: string
+  configPath: string,
 ): ReturnType<typeof createTsVmRuntime> {
   // Read the tsconfig to get compiler options
   const configFile = ts.readConfigFile(configPath, host.readFile);
@@ -187,7 +187,7 @@ export function createValModulesRuntime(
   const parsedConfig = ts.parseJsonConfigFileContent(
     configFile.config,
     host,
-    basePath
+    basePath,
   );
 
   // Ensure baseUrl is set if paths are configured
@@ -199,7 +199,7 @@ export function createValModulesRuntime(
   if (parsedConfig.options.paths) {
     console.log(
       "TypeScript path mappings found:",
-      Object.keys(parsedConfig.options.paths)
+      Object.keys(parsedConfig.options.paths),
     );
     console.log("Base URL:", parsedConfig.options.baseUrl);
   }
@@ -317,7 +317,7 @@ export default targetModule.def().then(importedModule => {
  */
 export async function evaluateValModulesFile(
   runtime: ReturnType<typeof createTsVmRuntime>,
-  valModulesFilePath: string
+  valModulesFilePath: string,
 ): Promise<ValModuleResult[] | null> {
   try {
     // Get the directory containing val.modules file
@@ -327,7 +327,7 @@ export async function evaluateValModulesFile(
     const moduleCode = generateModuleProcessorCode();
     const result = await runtime.run(
       moduleCode,
-      path.join(valModulesDir, "<system>.ts")
+      path.join(valModulesDir, "<system>.ts"),
     );
 
     // The module exports a Promise as default, so await it
@@ -337,7 +337,7 @@ export async function evaluateValModulesFile(
   } catch (err) {
     console.error(
       `Error evaluating val.modules file: ${valModulesFilePath}`,
-      err
+      err,
     );
     return null;
   }
@@ -353,7 +353,7 @@ export async function evaluateValModulesFile(
 export async function evaluateSingleModule(
   runtime: ReturnType<typeof createTsVmRuntime>,
   valModulesFilePath: string,
-  index: number
+  index: number,
 ): Promise<ValModuleResult | null> {
   try {
     // Get the directory containing val.modules file
@@ -363,7 +363,7 @@ export async function evaluateSingleModule(
     const moduleCode = generateSingleModuleProcessorCode(index);
     const result = await runtime.run(
       moduleCode,
-      path.join(valModulesDir, `<system-${index}>.ts`)
+      path.join(valModulesDir, `<system-${index}>.ts`),
     );
 
     // The module exports a Promise as default, so await it
@@ -373,7 +373,7 @@ export async function evaluateSingleModule(
   } catch (err) {
     console.error(
       `Error evaluating module at index ${index} from ${valModulesFilePath}`,
-      err
+      err,
     );
     return null;
   }
@@ -386,7 +386,7 @@ export async function evaluateSingleModule(
  * @returns Processed module information including validation results
  */
 export async function evaluateValModulesFileWithFileSystem(
-  filePath: string
+  filePath: string,
 ): Promise<ValModuleResult[] | null> {
   try {
     // Find tsconfig.json or jsconfig.json
@@ -403,14 +403,14 @@ export async function evaluateValModulesFileWithFileSystem(
         extensions: readonly string[],
         excludes: readonly string[] | undefined,
         includes: readonly string[],
-        depth?: number
+        depth?: number,
       ) => {
         return ts.sys.readDirectory(
           rootDir,
           extensions,
           excludes,
           includes,
-          depth
+          depth,
         );
       },
       fileExists: (fileName: string) => {
@@ -438,7 +438,7 @@ export async function evaluateValModulesFileWithFileSystem(
  */
 export async function getValModules(
   valRoot: string,
-  valModulesFilesByValRoot: { [valRoot: string]: string }
+  valModulesFilesByValRoot: { [valRoot: string]: string },
 ): Promise<ValModuleResult[] | null> {
   const valModulesFile = valModulesFilesByValRoot[valRoot];
   if (!valModulesFile) {

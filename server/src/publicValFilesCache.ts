@@ -50,12 +50,12 @@ export class PublicValFilesCache {
 
       this.filesByValRoot.set(valRoot, formattedFiles);
       console.log(
-        `[PublicValFilesCache] Updated cache for ${valRoot}: found ${formattedFiles.length} files`
+        `[PublicValFilesCache] Updated cache for ${valRoot}: found ${formattedFiles.length} files`,
       );
     } catch (error) {
       console.error(
         `[PublicValFilesCache] Error scanning ${publicValDir}:`,
-        error
+        error,
       );
       this.filesByValRoot.set(valRoot, []);
     }
@@ -84,13 +84,13 @@ export class PublicValFilesCache {
         { recursive: true },
         (eventType, filename) => {
           console.log(
-            `[PublicValFilesCache] File change detected in ${publicValDir}: ${eventType} ${filename}`
+            `[PublicValFilesCache] File change detected in ${publicValDir}: ${eventType} ${filename}`,
           );
           // Debounce: update cache after a short delay
           setTimeout(() => {
             this.updateCache(valRoot);
           }, 100);
-        }
+        },
       );
 
       this.watchers.set(valRoot, watcher);
@@ -98,7 +98,7 @@ export class PublicValFilesCache {
     } catch (error) {
       console.error(
         `[PublicValFilesCache] Error setting up watcher for ${publicValDir}:`,
-        error
+        error,
       );
     }
   }

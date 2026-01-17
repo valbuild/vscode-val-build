@@ -1,6 +1,6 @@
 export function stackToLine(
   filename: string,
-  stack: string
+  stack: string,
 ): number | undefined {
   const lines = stack.split("\n");
   for (const line of lines) {

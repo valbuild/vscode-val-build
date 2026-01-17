@@ -20,37 +20,37 @@ describe("PublicValFilesCache", () => {
       // Check for specific files
       assert.ok(
         files.includes("/public/val/logo.png"),
-        "Should include logo.png"
+        "Should include logo.png",
       );
       assert.ok(
         files.includes("/public/val/icon.svg"),
-        "Should include icon.svg"
+        "Should include icon.svg",
       );
       assert.ok(
         files.includes("/public/val/banner.jpg"),
-        "Should include banner.jpg"
+        "Should include banner.jpg",
       );
       assert.ok(
         files.includes("/public/val/data.json"),
-        "Should include data.json"
+        "Should include data.json",
       );
       assert.ok(
         files.includes("/public/val/document.pdf"),
-        "Should include document.pdf"
+        "Should include document.pdf",
       );
 
       // Check for nested files
       assert.ok(
         files.includes("/public/val/images/product1.png"),
-        "Should include nested images/product1.png"
+        "Should include nested images/product1.png",
       );
       assert.ok(
         files.includes("/public/val/documents/manual.pdf"),
-        "Should include nested documents/manual.pdf"
+        "Should include nested documents/manual.pdf",
       );
       assert.ok(
         files.includes("/public/val/nested/deep/deep-image.png"),
-        "Should include deeply nested file"
+        "Should include deeply nested file",
       );
 
       cache.dispose();
@@ -60,7 +60,7 @@ describe("PublicValFilesCache", () => {
       const cache = new PublicValFilesCache();
       const nonExistentRoot = path.join(
         __dirname,
-        "../__fixtures__/non-existent"
+        "../__fixtures__/non-existent",
       );
 
       await cache.initialize(nonExistentRoot);
@@ -84,7 +84,7 @@ describe("PublicValFilesCache", () => {
       assert.strictEqual(
         files2.length,
         0,
-        "Should have no files for uninitialized root"
+        "Should have no files for uninitialized root",
       );
 
       cache.dispose();
@@ -123,14 +123,14 @@ describe("PublicValFilesCache", () => {
       for (const expectedFile of expectedFiles) {
         assert.ok(
           files.includes(expectedFile),
-          `Should include ${expectedFile}`
+          `Should include ${expectedFile}`,
         );
       }
 
       assert.strictEqual(
         files.length,
         expectedFiles.length,
-        "Should have correct number of files"
+        "Should have correct number of files",
       );
 
       cache.dispose();
@@ -162,7 +162,7 @@ describe("PublicValFilesCache", () => {
       const filesBefore = cache.getFiles(fixtureRoot);
       assert.ok(
         !filesBefore.includes("/public/val/test-new-file.png"),
-        "Should not include test file initially"
+        "Should not include test file initially",
       );
 
       // Create a new file
@@ -174,7 +174,7 @@ describe("PublicValFilesCache", () => {
       const filesAfter = cache.getFiles(fixtureRoot);
       assert.ok(
         filesAfter.includes("/public/val/test-new-file.png"),
-        "Should include new test file after creation"
+        "Should include new test file after creation",
       );
 
       // Clean up
@@ -186,7 +186,7 @@ describe("PublicValFilesCache", () => {
       const cache = new PublicValFilesCache();
       const testFile = path.join(
         fixtureRoot,
-        "public/val/test-delete-file.png"
+        "public/val/test-delete-file.png",
       );
 
       // Create test file
@@ -197,7 +197,7 @@ describe("PublicValFilesCache", () => {
       const filesBefore = cache.getFiles(fixtureRoot);
       assert.ok(
         filesBefore.includes("/public/val/test-delete-file.png"),
-        "Should include test file initially"
+        "Should include test file initially",
       );
 
       // Delete the file
@@ -209,7 +209,7 @@ describe("PublicValFilesCache", () => {
       const filesAfter = cache.getFiles(fixtureRoot);
       assert.ok(
         !filesAfter.includes("/public/val/test-delete-file.png"),
-        "Should not include deleted test file"
+        "Should not include deleted test file",
       );
 
       cache.dispose();
@@ -221,7 +221,7 @@ describe("PublicValFilesCache", () => {
       const cache = new PublicValFilesCache();
       const testFile = path.join(
         fixtureRoot,
-        "public/val/test-refresh-file.png"
+        "public/val/test-refresh-file.png",
       );
 
       // Clean up test file if it exists
@@ -234,7 +234,7 @@ describe("PublicValFilesCache", () => {
       const filesBefore = cache.getFiles(fixtureRoot);
       assert.ok(
         !filesBefore.includes("/public/val/test-refresh-file.png"),
-        "Should not include test file initially"
+        "Should not include test file initially",
       );
 
       // Create a new file (without waiting for watcher)
@@ -246,7 +246,7 @@ describe("PublicValFilesCache", () => {
       const filesAfter = cache.getFiles(fixtureRoot);
       assert.ok(
         filesAfter.includes("/public/val/test-refresh-file.png"),
-        "Should include new test file after refresh"
+        "Should include new test file after refresh",
       );
 
       // Clean up
@@ -270,7 +270,7 @@ describe("PublicValFilesCache", () => {
       assert.strictEqual(
         filesAfter.length,
         0,
-        "Should have no files after dispose"
+        "Should have no files after dispose",
       );
     });
   });

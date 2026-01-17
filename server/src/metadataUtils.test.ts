@@ -9,19 +9,19 @@ describe("metadataUtils", () => {
   describe("getImageMetadata", () => {
     it("should normalize image/jpg to image/jpeg", () => {
       const imagePath = path.join(fixtureRoot, "public/val/banner.jpg");
-      
+
       // Ensure directory exists
       const dir = path.dirname(imagePath);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      
+
       // Create a valid 1x1 JPEG if it doesn't exist
       if (!fs.existsSync(imagePath)) {
         // Valid 1x1 JPEG (631 bytes)
         const jpegBuffer = Buffer.from(
           "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDAREAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCwAA8A/9k=",
-          "base64"
+          "base64",
         );
         fs.writeFileSync(imagePath, jpegBuffer);
       }
@@ -30,26 +30,34 @@ describe("metadataUtils", () => {
 
       // Should normalize image/jpg to image/jpeg
       if (metadata) {
-        assert.strictEqual(metadata.mimeType, "image/jpeg", "MIME type should be normalized to image/jpeg");
-        assert.notStrictEqual(metadata.mimeType, "image/jpg", "MIME type should not be image/jpg");
+        assert.strictEqual(
+          metadata.mimeType,
+          "image/jpeg",
+          "MIME type should be normalized to image/jpeg",
+        );
+        assert.notStrictEqual(
+          metadata.mimeType,
+          "image/jpg",
+          "MIME type should not be image/jpg",
+        );
       }
     });
 
     it("should extract metadata from PNG image", () => {
       const imagePath = path.join(fixtureRoot, "public/val/logo.png");
-      
+
       // Ensure directory exists
       const dir = path.dirname(imagePath);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      
+
       // Create a valid 1x1 PNG if it doesn't exist
       if (!fs.existsSync(imagePath)) {
         // Valid 1x1 transparent PNG (67 bytes)
         const pngBuffer = Buffer.from(
           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-          "base64"
+          "base64",
         );
         fs.writeFileSync(imagePath, pngBuffer);
       }
@@ -61,10 +69,18 @@ describe("metadataUtils", () => {
       if (metadata) {
         assert.strictEqual(metadata.mimeType, "image/png");
         if (metadata.width !== undefined) {
-          assert.strictEqual(metadata.width, 1, "1x1 PNG should have width of 1");
+          assert.strictEqual(
+            metadata.width,
+            1,
+            "1x1 PNG should have width of 1",
+          );
         }
         if (metadata.height !== undefined) {
-          assert.strictEqual(metadata.height, 1, "1x1 PNG should have height of 1");
+          assert.strictEqual(
+            metadata.height,
+            1,
+            "1x1 PNG should have height of 1",
+          );
         }
       } else {
         // If metadata is null, that's also acceptable for empty fixture files
@@ -74,16 +90,17 @@ describe("metadataUtils", () => {
 
     it("should extract metadata from SVG image", () => {
       const imagePath = path.join(fixtureRoot, "public/val/icon.svg");
-      
+
       // Ensure directory exists
       const dir = path.dirname(imagePath);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      
+
       // Create a simple SVG if it doesn't exist
       if (!fs.existsSync(imagePath)) {
-        const svgContent = '<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"></svg>';
+        const svgContent =
+          '<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"></svg>';
         fs.writeFileSync(imagePath, svgContent);
       }
 
@@ -108,7 +125,7 @@ describe("metadataUtils", () => {
 
     it("should handle corrupt image file gracefully", () => {
       const imagePath = path.join(fixtureRoot, "public/val/corrupt.png");
-      
+
       // Create a corrupt file
       if (!fs.existsSync(imagePath)) {
         fs.writeFileSync(imagePath, "not a real image");
@@ -195,7 +212,7 @@ describe("metadataUtils", () => {
         assert.strictEqual(
           metadata?.mimeType,
           expected,
-          `MIME type for ${file} should be ${expected}`
+          `MIME type for ${file} should be ${expected}`,
         );
       }
     });
@@ -216,7 +233,7 @@ describe("metadataUtils", () => {
         assert.strictEqual(
           metadata?.mimeType,
           expected,
-          `MIME type for ${file} should be ${expected}`
+          `MIME type for ${file} should be ${expected}`,
         );
       }
     });

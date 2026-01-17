@@ -9,7 +9,7 @@ describe("Invalid Path Validation", () => {
       "test.val.ts",
       code,
       ts.ScriptTarget.ES2015,
-      true
+      true,
     );
 
     function checkInvalidPaths(node: ts.Node) {
@@ -43,10 +43,10 @@ describe("Invalid Path Validation", () => {
               pathValue !== "/public/val"
             ) {
               const start = sourceFile.getLineAndCharacterOfPosition(
-                firstArg.getStart()
+                firstArg.getStart(),
               );
               const end = sourceFile.getLineAndCharacterOfPosition(
-                firstArg.getEnd()
+                firstArg.getEnd(),
               );
 
               const diagnostic: Diagnostic = {
@@ -71,10 +71,10 @@ describe("Invalid Path Validation", () => {
               (pathValue.startsWith("/public/val/") && pathValue.endsWith("/"))
             ) {
               const start = sourceFile.getLineAndCharacterOfPosition(
-                firstArg.getStart()
+                firstArg.getStart(),
               );
               const end = sourceFile.getLineAndCharacterOfPosition(
-                firstArg.getEnd()
+                firstArg.getEnd(),
               );
 
               const diagnostic: Diagnostic = {
@@ -111,20 +111,20 @@ export default c.define("/test.val.ts", s.image(), c.image("/public/foo.png"));
     assert.strictEqual(
       diagnostics.length,
       1,
-      "Should have one diagnostic for path not under /public/val/"
+      "Should have one diagnostic for path not under /public/val/",
     );
     assert.strictEqual(diagnostics[0].code, "invalid-path-location");
     assert.ok(
       diagnostics[0].message.includes('"/public/foo.png"'),
-      "Message should mention the path"
+      "Message should mention the path",
     );
     assert.ok(
       diagnostics[0].message.includes("not under /public/val/"),
-      "Message should say it's not under /public/val/"
+      "Message should say it's not under /public/val/",
     );
     assert.ok(
       diagnostics[0].message.includes("/public/val/foo.png"),
-      "Message should suggest the correct path"
+      "Message should suggest the correct path",
     );
   });
 
@@ -139,16 +139,16 @@ export default c.define("/test.val.ts", s.file(), c.file("/public/documents/repo
     assert.strictEqual(
       diagnostics.length,
       1,
-      "Should have one diagnostic for path not under /public/val/"
+      "Should have one diagnostic for path not under /public/val/",
     );
     assert.strictEqual(diagnostics[0].code, "invalid-path-location");
     assert.ok(
       diagnostics[0].message.includes("/public/documents/report.pdf"),
-      "Message should mention the path"
+      "Message should mention the path",
     );
     assert.ok(
       diagnostics[0].message.includes("/public/val/report.pdf"),
-      "Message should suggest moving to /public/val/"
+      "Message should suggest moving to /public/val/",
     );
   });
 
@@ -163,16 +163,16 @@ export default c.define("/test.val.ts", s.image(), c.image("/public/val/"));
     assert.strictEqual(
       diagnostics.length,
       1,
-      "Should have one diagnostic for directory path"
+      "Should have one diagnostic for directory path",
     );
     assert.strictEqual(diagnostics[0].code, "invalid-path-directory");
     assert.ok(
       diagnostics[0].message.includes('"/public/val/"'),
-      "Message should mention the path"
+      "Message should mention the path",
     );
     assert.ok(
       diagnostics[0].message.includes("directory path"),
-      "Message should say it's a directory path"
+      "Message should say it's a directory path",
     );
   });
 
@@ -187,7 +187,7 @@ export default c.define("/test.val.ts", s.file(), c.file("/public/val/"));
     assert.strictEqual(
       diagnostics.length,
       1,
-      "Should have one diagnostic for directory path"
+      "Should have one diagnostic for directory path",
     );
     assert.strictEqual(diagnostics[0].code, "invalid-path-directory");
   });
@@ -209,15 +209,15 @@ export default c.define("/test.val.ts", s.object({
     assert.strictEqual(
       diagnostics.length,
       2,
-      "Should have two diagnostics for both directory paths"
+      "Should have two diagnostics for both directory paths",
     );
     assert.ok(
       diagnostics[0].message.includes("/public/val/images/"),
-      "First error should mention /public/val/images/"
+      "First error should mention /public/val/images/",
     );
     assert.ok(
       diagnostics[1].message.includes("/public/val/nested/deep/"),
-      "Second error should mention /public/val/nested/deep/"
+      "Second error should mention /public/val/nested/deep/",
     );
   });
 
@@ -240,7 +240,7 @@ export default c.define("/test.val.ts", s.object({
     assert.strictEqual(
       diagnostics.length,
       0,
-      "Should have no diagnostics for valid file paths"
+      "Should have no diagnostics for valid file paths",
     );
   });
 
@@ -255,7 +255,7 @@ export default c.define("/test.val.ts", s.image(), c.image(""));
     assert.strictEqual(
       diagnostics.length,
       0,
-      "Should have no diagnostics for empty string (user is still typing)"
+      "Should have no diagnostics for empty string (user is still typing)",
     );
   });
 
@@ -270,7 +270,7 @@ export default c.define("/test.val.ts", s.image(), c.image("/public/val"));
     assert.strictEqual(
       diagnostics.length,
       0,
-      "Should have no diagnostics for /public/val without trailing slash (handled by Val core)"
+      "Should have no diagnostics for /public/val without trailing slash (handled by Val core)",
     );
   });
 });

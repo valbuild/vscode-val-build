@@ -25,7 +25,7 @@ const REGEXP_MODES: Record<
 
 export function validateRoute(
   route: string,
-  mode: RouteMode
+  mode: RouteMode,
 ): { valid: true } | { valid: false; message: string } {
   if (!route.startsWith("/")) {
     return {
@@ -59,7 +59,7 @@ export function validateRoute(
           valid: false,
           message: `Catch-all parameter '[...${part.slice(
             4,
-            -1
+            -1,
           )}]' must be the last part of the route. Got: '${route}'`,
         };
       }
@@ -119,7 +119,7 @@ export function validateRoute(
  */
 export function validateRouteSchema(
   schema: { currentRouter?: { mode?: RouteMode } } | undefined,
-  route: string
+  route: string,
 ): { valid: true } | { valid: false; message: string } {
   const mode = schema?.currentRouter?.mode || "source";
   return validateRoute(route, mode);
@@ -131,7 +131,7 @@ export function validateRouteSchema(
 export function filterRoutesByPatterns(
   routes: string[],
   includePattern?: SerializedRegExpPattern,
-  excludePattern?: SerializedRegExpPattern
+  excludePattern?: SerializedRegExpPattern,
 ): string[] {
   // Validate patterns upfront and warn about issues
   let includeRegex: RegExp | null = null;
@@ -144,7 +144,7 @@ export function filterRoutesByPatterns(
       console.warn(
         `[Val] Invalid include pattern: /${includePattern.source}/${includePattern.flags}`,
         `\nError: ${e instanceof Error ? e.message : String(e)}`,
-        `\nAll routes will be filtered out due to malformed include pattern.`
+        `\nAll routes will be filtered out due to malformed include pattern.`,
       );
     }
   }
@@ -156,7 +156,7 @@ export function filterRoutesByPatterns(
       console.warn(
         `[Val] Invalid exclude pattern: /${excludePattern.source}/${excludePattern.flags}`,
         `\nError: ${e instanceof Error ? e.message : String(e)}`,
-        `\nAll routes will be filtered out due to malformed exclude pattern.`
+        `\nAll routes will be filtered out due to malformed exclude pattern.`,
       );
     }
   }
@@ -194,7 +194,7 @@ export function filterRoutesByPatterns(
 export function validateRoutePatterns(
   route: string,
   includePattern?: SerializedRegExpPattern,
-  excludePattern?: SerializedRegExpPattern
+  excludePattern?: SerializedRegExpPattern,
 ): { valid: true } | { valid: false; message: string } {
   // Validate include pattern
   if (includePattern) {

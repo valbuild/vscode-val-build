@@ -5,7 +5,7 @@ describe("transformer", () => {
   it("should transform a file", async () => {
     let n: ts.Identifier;
     const transformerFactory: ts.TransformerFactory<ts.SourceFile> = (
-      context
+      context,
     ) => {
       return (sourceFile) => {
         const visitor = (node: ts.Node): ts.Node => {
@@ -27,26 +27,28 @@ describe("transformer", () => {
                   ts.factory.createObjectLiteralExpression([
                     ts.factory.createPropertyAssignment(
                       ts.factory.createIdentifier("width"),
-                      ts.factory.createNumericLiteral(metadata.width.toString())
+                      ts.factory.createNumericLiteral(
+                        metadata.width.toString(),
+                      ),
                     ),
                     ts.factory.createPropertyAssignment(
                       ts.factory.createIdentifier("height"),
                       ts.factory.createNumericLiteral(
-                        metadata.height.toString()
-                      )
+                        metadata.height.toString(),
+                      ),
                     ),
                     ts.factory.createPropertyAssignment(
                       ts.factory.createIdentifier("mimeType"),
                       ts.factory.createNumericLiteral(
-                        metadata.mimeType.toString()
-                      )
+                        metadata.mimeType.toString(),
+                      ),
                     ),
                     ts.factory.createPropertyAssignment(
                       ts.factory.createIdentifier("alt"),
-                      ts.factory.createNumericLiteral(metadata.alt.toString())
+                      ts.factory.createNumericLiteral(metadata.alt.toString()),
                     ),
                   ]),
-                ]
+                ],
               );
               return newCallExpression;
             }
@@ -60,7 +62,7 @@ describe("transformer", () => {
     const sourceFile = ts.createSourceFile(
       "test.val.ts",
       `c.image('/public/image.png')`,
-      ts.ScriptTarget.ESNext
+      ts.ScriptTarget.ESNext,
     );
     // add source file to program:
     const result = ts.transform(sourceFile, [transformerFactory]);

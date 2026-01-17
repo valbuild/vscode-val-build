@@ -16,7 +16,7 @@ export type ModulePathMap = {
 
 export function getModulePathRange(
   modulePath: string,
-  modulePathMap: ModulePathMap
+  modulePathMap: ModulePathMap,
 ) {
   // Handle empty or invalid module paths gracefully
   if (!modulePath || typeof modulePath !== "string") {
@@ -59,7 +59,7 @@ export function getModulePathRange(
 }
 
 export function createModulePathMap(
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
 ): ModulePathMap | undefined {
   for (const child of sourceFile
     .getChildren()
@@ -79,7 +79,7 @@ export function createModulePathMap(
 
 function traverse(
   node: ts.Expression,
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
 ): ModulePathMap | undefined {
   if (ts.isStringLiteral(node) || ts.isNumericLiteral(node)) {
     const tsEnd = sourceFile.getLineAndCharacterOfPosition(node.end);
@@ -112,7 +112,7 @@ function traverse(
 
 function traverseCallExpression(
   node: ts.CallExpression,
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
 ): ModulePathMap | undefined {
   if (ts.isPropertyAccessExpression(node.expression)) {
     if (
@@ -123,13 +123,13 @@ function traverseCallExpression(
       const val = {
         children: {},
         start: sourceFile.getLineAndCharacterOfPosition(
-          node.getStart(sourceFile)
+          node.getStart(sourceFile),
         ), // TODO: We do + 1 to line up the diagnostics error exactly below a normal
         end: sourceFile.getLineAndCharacterOfPosition(node.getEnd()),
       };
       if (node.arguments[0]) {
         const firstArgEnd = sourceFile.getLineAndCharacterOfPosition(
-          node.arguments[0].end
+          node.arguments[0].end,
         );
         const _ref = {
           children: {},
@@ -150,7 +150,7 @@ function traverseCallExpression(
           };
         }
         const metadataEnd = sourceFile.getLineAndCharacterOfPosition(
-          node.arguments[1].end
+          node.arguments[1].end,
         );
         return {
           val,
@@ -175,7 +175,7 @@ function traverseCallExpression(
 
 function traverseArrayLiteral(
   node: ts.ArrayLiteralExpression,
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
 ): ModulePathMap {
   return node.elements.reduce((acc, element, index) => {
     if (ts.isExpression(element)) {
@@ -203,7 +203,7 @@ function traverseArrayLiteral(
 
 function traverseObjectLiteral(
   node: ts.ObjectLiteralExpression,
-  sourceFile: ts.SourceFile
+  sourceFile: ts.SourceFile,
 ): ModulePathMap {
   return node.properties.reduce((acc, property) => {
     if (ts.isPropertyAssignment(property)) {
@@ -214,7 +214,7 @@ function traverseObjectLiteral(
       const value = property.initializer;
       if (key) {
         const tsEnd = sourceFile.getLineAndCharacterOfPosition(
-          property.name.getEnd()
+          property.name.getEnd(),
         );
         const start = {
           line: tsEnd.line,
@@ -227,10 +227,10 @@ function traverseObjectLiteral(
         const val = {
           children: {},
           start: sourceFile.getLineAndCharacterOfPosition(
-            property.initializer.getStart(sourceFile)
+            property.initializer.getStart(sourceFile),
           ),
           end: sourceFile.getLineAndCharacterOfPosition(
-            property.initializer.getEnd()
+            property.initializer.getEnd(),
           ),
         };
         return {

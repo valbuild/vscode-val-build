@@ -8,9 +8,9 @@ describe("stackToLine", () => {
     assert.deepStrictEqual(
       stackToLine(
         "/home/freekh/Code/blank/blankno-v2/web/content/aboutUs.val.ts",
-        stack
+        stack,
       ),
-      15
+      15,
     );
   });
 });

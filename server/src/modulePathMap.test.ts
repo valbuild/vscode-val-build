@@ -68,7 +68,7 @@ export default c.define(
     const sourceFile = ts.createSourceFile(
       "./oj/test.val.ts",
       text,
-      ts.ScriptTarget.ES2015
+      ts.ScriptTarget.ES2015,
     );
 
     const modulePathMap = createModulePathMap(sourceFile);
@@ -83,7 +83,7 @@ export default c.define(
     console.log(getModulePathRange('"nested"."text"', modulePathMap));
     assert.deepStrictEqual(
       getModulePathRange('"nested"."text"', modulePathMap),
-      { end: { character: 8, line: 50 }, start: { character: 4, line: 50 } }
+      { end: { character: 8, line: 50 }, start: { character: 4, line: 50 } },
     );
   });
 
@@ -118,7 +118,7 @@ export default c.define('/content/aboutUs.val.ts', schema, {
     const sourceFile = ts.createSourceFile(
       "./oj/test.val.ts",
       text,
-      ts.ScriptTarget.ES2015
+      ts.ScriptTarget.ES2015,
     );
 
     const modulePathMap = createModulePathMap(sourceFile);
@@ -146,7 +146,7 @@ export default c.define('/content', schema, {
     const sourceFile = ts.createSourceFile(
       "./content.val.ts",
       text,
-      ts.ScriptTarget.ES2015
+      ts.ScriptTarget.ES2015,
     );
 
     const modulePathMap = createModulePathMap(sourceFile);
@@ -158,7 +158,7 @@ export default c.define('/content', schema, {
       {
         start: { line: 7, character: 31 },
         end: { line: 7, character: 34 },
-      }
+      },
     );
   });
 
@@ -176,7 +176,7 @@ export default c.define('/content', schema, {
     const sourceFile = ts.createSourceFile(
       "./content.val.ts",
       text,
-      ts.ScriptTarget.ES2015
+      ts.ScriptTarget.ES2015,
     );
 
     const modulePathMap = createModulePathMap(sourceFile);
@@ -190,11 +190,11 @@ export default c.define('/content', schema, {
     assert.strictEqual(getModulePathRange("foo.bar", modulePathMap), undefined);
     assert.strictEqual(
       getModulePathRange(undefined as unknown as string, modulePathMap),
-      undefined
+      undefined,
     );
     assert.strictEqual(
       getModulePathRange(null as unknown as string, modulePathMap),
-      undefined
+      undefined,
     );
   });
 });

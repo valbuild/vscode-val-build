@@ -6,7 +6,7 @@ describe("checkRoute", () => {
   describe("checkRouteIsValid", () => {
     // Helper to create a mock service
     function createMockService(
-      modules: ValModuleResult[]
+      modules: ValModuleResult[],
     ): RouteValidationService {
       return {
         getAllModules: async () => modules,
@@ -28,7 +28,7 @@ describe("checkRoute", () => {
           fakeNextAppRouter,
           s.object({
             title: s.string(),
-          })
+          }),
         )
         ["executeSerialize"]();
 
@@ -50,7 +50,7 @@ describe("checkRoute", () => {
         "/my-slug",
         undefined,
         undefined,
-        service
+        service,
       );
 
       assert.strictEqual(result.error, false, "Should validate existing route");
@@ -71,7 +71,7 @@ describe("checkRoute", () => {
           fakeNextAppRouter,
           s.object({
             title: s.string(),
-          })
+          }),
         )
         ["executeSerialize"]();
 
@@ -93,22 +93,22 @@ describe("checkRoute", () => {
         "/non-existent-slug",
         undefined,
         undefined,
-        service
+        service,
       );
 
       assert.strictEqual(
         result.error,
         true,
-        "Should fail for non-existent route"
+        "Should fail for non-existent route",
       );
       if (result.error) {
         assert.ok(
           result.message.includes("does not exist"),
-          "Should mention route doesn't exist"
+          "Should mention route doesn't exist",
         );
         assert.ok(
           result.message.includes("Closest match"),
-          "Should suggest closest match"
+          "Should suggest closest match",
         );
       }
     });
@@ -127,7 +127,7 @@ describe("checkRoute", () => {
           fakeNextAppRouter,
           s.object({
             title: s.string(),
-          })
+          }),
         )
         ["executeSerialize"]();
 
@@ -150,13 +150,13 @@ describe("checkRoute", () => {
         "/api/users",
         includePattern,
         undefined,
-        service
+        service,
       );
 
       assert.strictEqual(
         result.error,
         false,
-        "Should validate route matching include pattern"
+        "Should validate route matching include pattern",
       );
     });
 
@@ -174,7 +174,7 @@ describe("checkRoute", () => {
           fakeNextAppRouter,
           s.object({
             title: s.string(),
-          })
+          }),
         )
         ["executeSerialize"]();
 
@@ -197,18 +197,18 @@ describe("checkRoute", () => {
         "/admin/dashboard",
         undefined,
         excludePattern,
-        service
+        service,
       );
 
       assert.strictEqual(
         result.error,
         true,
-        "Should fail route matching exclude pattern"
+        "Should fail route matching exclude pattern",
       );
       if (result.error) {
         assert.ok(
           result.message.includes("matches exclude pattern"),
-          "Should mention exclude pattern"
+          "Should mention exclude pattern",
         );
       }
     });
@@ -227,7 +227,7 @@ describe("checkRoute", () => {
           fakeNextAppRouter,
           s.object({
             title: s.string(),
-          })
+          }),
         )
         ["executeSerialize"]();
 
@@ -252,13 +252,13 @@ describe("checkRoute", () => {
         "/api/users",
         includePattern,
         excludePattern,
-        service
+        service,
       );
 
       assert.strictEqual(
         result.error,
         false,
-        "Should validate route matching include and not matching exclude"
+        "Should validate route matching include and not matching exclude",
       );
     });
   });

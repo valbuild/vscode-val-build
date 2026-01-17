@@ -111,16 +111,32 @@ describe("valModules", () => {
       assert.ok(module1, "Should have test-one module");
       assert.ok(module1.schema, "Should have schema");
       assert.ok(module1.source, "Should have source");
-      assert.strictEqual(module1.runtimeError, false, "Should not have runtime error");
-      assert.strictEqual(module1.defaultExport, true, "Should have default export");
+      assert.strictEqual(
+        module1.runtimeError,
+        false,
+        "Should not have runtime error",
+      );
+      assert.strictEqual(
+        module1.defaultExport,
+        true,
+        "Should have default export",
+      );
 
       // Check second module
       const module2 = result.find((m) => m.path.includes("test-two"));
       assert.ok(module2, "Should have test-two module");
       assert.ok(module2.schema, "Should have schema");
       assert.ok(module2.source, "Should have source");
-      assert.strictEqual(module2.runtimeError, false, "Should not have runtime error");
-      assert.strictEqual(module2.defaultExport, true, "Should have default export");
+      assert.strictEqual(
+        module2.runtimeError,
+        false,
+        "Should not have runtime error",
+      );
+      assert.strictEqual(
+        module2.defaultExport,
+        true,
+        "Should have default export",
+      );
     });
 
     it("should return null if no val.modules file exists for valRoot", async () => {
@@ -143,7 +159,7 @@ describe("valModules", () => {
         readFile: ts.sys.readFile,
         useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
       };
-      
+
       const runtime = createValModulesRuntime(host, configPath);
       const result = await evaluateValModulesFile(runtime, valModulesPath);
 
@@ -154,9 +170,15 @@ describe("valModules", () => {
       // Verify each module has the expected structure
       for (const module of result) {
         assert.ok(module.path, "Module should have path");
-        assert.ok(typeof module.runtimeError === "boolean", "Should have runtimeError flag");
-        assert.ok(typeof module.defaultExport === "boolean", "Should have defaultExport flag");
-        
+        assert.ok(
+          typeof module.runtimeError === "boolean",
+          "Should have runtimeError flag",
+        );
+        assert.ok(
+          typeof module.defaultExport === "boolean",
+          "Should have defaultExport flag",
+        );
+
         if (!module.runtimeError) {
           assert.ok(module.schema, "Non-error module should have schema");
           assert.ok(module.source, "Non-error module should have source");
@@ -176,9 +198,15 @@ describe("valModules", () => {
       // Verify each module has the expected structure
       for (const module of result) {
         assert.ok(module.path, "Module should have path");
-        assert.ok(typeof module.runtimeError === "boolean", "Should have runtimeError flag");
-        assert.ok(typeof module.defaultExport === "boolean", "Should have defaultExport flag");
-        
+        assert.ok(
+          typeof module.runtimeError === "boolean",
+          "Should have runtimeError flag",
+        );
+        assert.ok(
+          typeof module.defaultExport === "boolean",
+          "Should have defaultExport flag",
+        );
+
         if (!module.runtimeError) {
           assert.ok(module.schema, "Non-error module should have schema");
           assert.ok(module.source, "Non-error module should have source");
@@ -190,7 +218,11 @@ describe("valModules", () => {
       const invalidPath = "/tmp/non-existent-file.ts";
       const result = await evaluateValModulesFileWithFileSystem(invalidPath);
 
-      assert.strictEqual(result, null, "Should return null when config not found");
+      assert.strictEqual(
+        result,
+        null,
+        "Should return null when config not found",
+      );
     });
   });
 
@@ -205,10 +237,16 @@ describe("valModules", () => {
       };
 
       const runtime = createValModulesRuntime(host, configPath);
-      
+
       assert.ok(runtime, "Should return a runtime instance");
-      assert.ok(typeof runtime.run === "function", "Runtime should have run method");
-      assert.ok(typeof runtime.invalidateFile === "function", "Runtime should have invalidateFile method");
+      assert.ok(
+        typeof runtime.run === "function",
+        "Runtime should have run method",
+      );
+      assert.ok(
+        typeof runtime.invalidateFile === "function",
+        "Runtime should have invalidateFile method",
+      );
     });
 
     it("should throw error if config file is invalid", () => {
