@@ -86,12 +86,7 @@ export function createTsVmRuntime(opts: {
         opts.host,
       );
 
-      // Debug: Log resolution attempts for path-mapped modules
-      if (resolved.resolvedModule) {
-        console.log(
-          `Resolved ${specifier} to ${resolved.resolvedModule.resolvedFileName}`,
-        );
-      } else if (
+      if (
         compilerOptions.paths &&
         !specifier.startsWith(".") &&
         !specifier.startsWith("node:")
