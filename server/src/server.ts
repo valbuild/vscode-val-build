@@ -67,9 +67,13 @@ let valRoots: string[] = [];
 let servicesByValRoot: {
   [valRoot: string]: ValService;
 } = {};
+// Track val roots that failed to initialize, so we can retry on file changes
+let failedValRoots: Set<string> = new Set();
 let valModulesFilesByValRoot: {
   [valRoot: string]: string;
 } = {};
+// Store the cached file system for reuse during re-initialization
+let cachedFileSystemInstance: ValFileSystem | null = null;
 let runtimesByValRoot: {
   [valRoot: string]: ReturnType<typeof createValModulesRuntime>;
 } = {};
@@ -141,27 +145,29 @@ connection.onInitialize(async (params: InitializeParams) => {
 
   // Create file system abstraction for Val services
   const cachedFileSystem = createCachedFileSystem(cache);
+  cachedFileSystemInstance = cachedFileSystem;
 
   // Initialize services for each Val root
+  const filteredValRoots = valRoots.filter(
+    (valRoot) => !valRoot.includes("node_modules"),
+  );
   const maybeServicesByValRoot = await Promise.all(
-    valRoots
-      .filter((valRoot) => !valRoot.includes("node_modules"))
-      .map(async (valRoot) => {
-        const service = await initializeService(
-          valRoot,
-          cachedFileSystem,
-        ).catch((err) => {
-          console.error(
-            `Error initializing Val service for root: ${valRoot}`,
-            err,
-          );
-          return null;
-        });
-        if (service) {
-          return [valRoot, service] as const;
-        }
+    filteredValRoots.map(async (valRoot) => {
+      const service = await initializeService(
+        valRoot,
+        cachedFileSystem,
+      ).catch((err) => {
+        console.error(
+          `Error initializing Val service for root: ${valRoot}`,
+          err,
+        );
         return null;
-      }),
+      });
+      if (service) {
+        return [valRoot, service] as const;
+      }
+      return null;
+    }),
   );
   servicesByValRoot = Object.fromEntries(
     maybeServicesByValRoot.filter((maybeService) => maybeService !== null) as [
@@ -169,6 +175,17 @@ connection.onInitialize(async (params: InitializeParams) => {
       ValService,
     ][],
   );
+
+  // Track failed val roots for re-initialization on file changes
+  failedValRoots = new Set(
+    filteredValRoots.filter((valRoot) => !(valRoot in servicesByValRoot)),
+  );
+  if (failedValRoots.size > 0) {
+    console.log(
+      `Failed to initialize ${failedValRoots.size} val root(s), will retry on file changes:`,
+      Array.from(failedValRoots),
+    );
+  }
 
   // Initialize public val files cache for each Val root
   for (const valRoot of valRoots.filter(
@@ -215,11 +232,79 @@ function getValRoots(valConfigFiles: string[], packageJsonFiles: string[]) {
   return valRoots;
 }
 
-connection.onDidChangeWatchedFiles((params) => {
-  params.changes.forEach((change) => {
+connection.onDidChangeWatchedFiles(async (params) => {
+  for (const change of params.changes) {
     console.log(change);
-  });
+    const fsPath = uriToFsPath(change.uri);
+
+    // Check if this is a critical file that could affect initialization
+    const isCriticalFile =
+      fsPath.endsWith("package.json") ||
+      fsPath.endsWith("val.modules.ts") ||
+      fsPath.endsWith("val.modules.js") ||
+      fsPath.endsWith("val.config.ts") ||
+      fsPath.endsWith("val.config.js");
+
+    if (isCriticalFile) {
+      await tryReinitializeFailedRoots(fsPath);
+    }
+  }
 });
+
+// Helper function to try re-initializing failed val roots when critical files change
+async function tryReinitializeFailedRoots(changedFilePath: string) {
+  if (failedValRoots.size === 0 || !cachedFileSystemInstance) {
+    return;
+  }
+
+  // Find which failed val root this file belongs to
+  const affectedValRoot = Array.from(failedValRoots).find((valRoot) =>
+    changedFilePath.startsWith(valRoot),
+  );
+
+  if (!affectedValRoot) {
+    return;
+  }
+
+  console.log(
+    `Critical file changed in failed val root, attempting re-initialization: ${affectedValRoot}`,
+  );
+
+  // Clear any cached content for this file
+  cache.delete(changedFilePath);
+
+  try {
+    const service = await initializeService(
+      affectedValRoot,
+      cachedFileSystemInstance,
+    );
+
+    if (service) {
+      servicesByValRoot[affectedValRoot] = service;
+      failedValRoots.delete(affectedValRoot);
+      console.log(`Successfully initialized val root: ${affectedValRoot}`);
+
+      // Initialize public val files cache for this root
+      await publicValFilesCache.initialize(affectedValRoot);
+      console.log(
+        `Initialized public val files cache for root: ${affectedValRoot}`,
+      );
+
+      // Revalidate all open documents in this val root
+      documents.all().forEach((doc) => {
+        const docPath = decodeURIComponent(uriToFsPath(doc.uri));
+        if (docPath.startsWith(affectedValRoot)) {
+          validateTextDocument(doc);
+        }
+      });
+    }
+  } catch (err) {
+    console.error(
+      `Re-initialization still failed for val root: ${affectedValRoot}`,
+      err,
+    );
+  }
+}
 
 connection.onInitialized(() => {
   if (hasConfigurationCapability) {
@@ -669,6 +754,19 @@ async function validateTextDocumentInternal(
     fsPath.includes("val.config.js") ||
     fsPath.includes("val.modules.ts") ||
     fsPath.includes("val.modules.js");
+
+  // Check if this is a critical file for initialization (package.json, val.modules, val.config)
+  const isCriticalForInit =
+    fsPath.endsWith("package.json") ||
+    fsPath.includes("val.modules.ts") ||
+    fsPath.includes("val.modules.js") ||
+    fsPath.includes("val.config.ts") ||
+    fsPath.includes("val.config.js");
+
+  // Try to re-initialize failed val roots when critical files change
+  if (isCriticalForInit) {
+    await tryReinitializeFailedRoots(fsPath);
+  }
 
   if (isValRelatedFile) {
     cache.set(fsPath, text);
@@ -1348,11 +1446,6 @@ function checkKeyOf(
     };
   }
 }
-
-connection.onDidChangeWatchedFiles((_change) => {
-  // Monitored files have change in VSCode
-  connection.console.log("We received a file change event");
-});
 
 // This handler provides the initial list of the completion items.
 connection.onCompletion(
