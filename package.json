@@ -4,7 +4,7 @@
   "author": "Val Build",
   "icon": "images/icon.png",
   "license": "MIT",
-  "version": "1.0.22",
+  "version": "1.0.23",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/valbuild/vscode-val-build.git"
