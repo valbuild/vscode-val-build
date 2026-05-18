@@ -19,6 +19,10 @@ import {
   SerializedRegExpPattern,
 } from "./routeValidation";
 import { PublicValFilesCache } from "./publicValFilesCache";
+import {
+  getFieldPathFromCDefine,
+  resolveSchemaAtFieldPath,
+} from "./completionFieldSchema";
 
 /**
  * Get sourcePath from a keyOf schema
@@ -619,11 +623,27 @@ export class ImagePathCompletionProvider implements CompletionProvider {
   ): Promise<CompletionItem[]> {
     console.log("[ImagePathCompletionProvider] Starting completion");
 
+    const galleryInfo = await resolveReferencedGallery(
+      context,
+      sourceFile,
+      service,
+    );
+
     // Get all files from /public/val directory
-    const files = this.cache.getFiles(valRoot);
+    let files = this.cache.getFiles(valRoot);
     console.log(
       `[ImagePathCompletionProvider] Found ${files.length} files in cache`,
     );
+
+    if (galleryInfo) {
+      const prefix = galleryInfo.directory + "/";
+      files = files.filter(
+        (f) => f === galleryInfo.directory || f.startsWith(prefix),
+      );
+      console.log(
+        `[ImagePathCompletionProvider] Filtered to gallery directory ${galleryInfo.directory}: ${files.length} files`,
+      );
+    }
 
     // Filter to image files only (common image extensions)
     const imageExtensions = [
@@ -647,10 +667,15 @@ export class ImagePathCompletionProvider implements CompletionProvider {
 
     // Create completion items
     const items: CompletionItem[] = imageFiles.map((file) => {
+      const detail = galleryInfo
+        ? galleryInfo.registered.has(file)
+          ? `Already in gallery ${galleryInfo.referencedModuleFilePath}`
+          : `Not yet in gallery — fix will add it to ${galleryInfo.referencedModuleFilePath}`
+        : "Image file from /public/val";
       const item: CompletionItem = {
         label: file,
         kind: CompletionItemKind.File,
-        detail: "Image file from /public/val",
+        detail,
         data: {
           type: "image",
           filePath: file,
@@ -723,18 +748,39 @@ export class FilePathCompletionProvider implements CompletionProvider {
   ): Promise<CompletionItem[]> {
     console.log("[FilePathCompletionProvider] Starting completion");
 
+    const galleryInfo = await resolveReferencedGallery(
+      context,
+      sourceFile,
+      service,
+    );
+
     // Get all files from /public/val directory
-    const files = this.cache.getFiles(valRoot);
+    let files = this.cache.getFiles(valRoot);
     console.log(
       `[FilePathCompletionProvider] Found ${files.length} files in cache`,
     );
 
+    if (galleryInfo) {
+      const prefix = galleryInfo.directory + "/";
+      files = files.filter(
+        (f) => f === galleryInfo.directory || f.startsWith(prefix),
+      );
+      console.log(
+        `[FilePathCompletionProvider] Filtered to gallery directory ${galleryInfo.directory}: ${files.length} files`,
+      );
+    }
+
     // Create completion items for all files
     const items: CompletionItem[] = files.map((file) => {
+      const detail = galleryInfo
+        ? galleryInfo.registered.has(file)
+          ? `Already in gallery ${galleryInfo.referencedModuleFilePath}`
+          : `Not yet in gallery — fix will add it to ${galleryInfo.referencedModuleFilePath}`
+        : "File from /public/val";
       const item: CompletionItem = {
         label: file,
         kind: CompletionItemKind.File,
-        detail: "File from /public/val",
+        detail,
         data: {
           type: "file",
           filePath: file,
@@ -785,6 +831,90 @@ export class FilePathCompletionProvider implements CompletionProvider {
 
     return items;
   }
+}
+
+/**
+ * If the c.image/c.file call expression in `context` lives under a c.define
+ * whose field schema references a media gallery module (s.image(mediaVal)),
+ * return the gallery directory and registered file set so the caller can
+ * filter completions.
+ */
+async function resolveReferencedGallery(
+  context: CompletionContext,
+  sourceFile: ts.SourceFile | undefined,
+  service: ValService,
+): Promise<
+  | {
+      referencedModuleFilePath: string;
+      directory: string;
+      registered: Set<string>;
+    }
+  | undefined
+> {
+  if (!sourceFile || !context.callExpression) return undefined;
+  const fieldInfo = getFieldPathFromCDefine(context.callExpression);
+  if (!fieldInfo || !fieldInfo.moduleFilePath) return undefined;
+
+  let containingModule: { schema?: SerializedSchema; source?: unknown };
+  try {
+    containingModule = await service.read(
+      fieldInfo.moduleFilePath as ModuleFilePath,
+      "" as ModulePath,
+    );
+  } catch (err) {
+    console.error(
+      "[completionProviders] Failed to read containing module for gallery resolution:",
+      err,
+    );
+    return undefined;
+  }
+  if (!containingModule.schema) return undefined;
+  const fieldSchema = resolveSchemaAtFieldPath(
+    containingModule.schema,
+    fieldInfo.fieldPath,
+  );
+  if (!fieldSchema) return undefined;
+  if (fieldSchema.type !== "image" && fieldSchema.type !== "file") {
+    return undefined;
+  }
+  const referencedModule = (fieldSchema as { referencedModule?: string })
+    .referencedModule;
+  if (!referencedModule) return undefined;
+
+  let referenced: { schema?: SerializedSchema; source?: unknown };
+  try {
+    referenced = await service.read(
+      referencedModule as ModuleFilePath,
+      "" as ModulePath,
+    );
+  } catch (err) {
+    console.error(
+      "[completionProviders] Failed to read referenced gallery module:",
+      err,
+    );
+    return undefined;
+  }
+  const refSchema = referenced.schema;
+  if (!refSchema || refSchema.type !== "record") return undefined;
+  if (!("directory" in refSchema) || typeof refSchema.directory !== "string") {
+    return undefined;
+  }
+  const directory = refSchema.directory;
+  const registered = new Set<string>();
+  if (
+    referenced.source &&
+    typeof referenced.source === "object" &&
+    !Array.isArray(referenced.source)
+  ) {
+    for (const key of Object.keys(referenced.source)) {
+      registered.add(key);
+    }
+  }
+  return {
+    referencedModuleFilePath: referencedModule,
+    directory,
+    registered,
+  };
 }
 
 /**

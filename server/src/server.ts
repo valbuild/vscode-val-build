@@ -51,6 +51,7 @@ import { detectCompletionContext, isValFile } from "./completionContext";
 import { CompletionProviderRegistry } from "./completionProviders";
 import { ValService } from "./ValService";
 import { PublicValFilesCache } from "./publicValFilesCache";
+import { findMediaGalleryIssues } from "./mediaGalleryValidation";
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -1315,6 +1316,37 @@ async function validateTextDocumentInternal(
             }
           }
         }
+      }
+    }
+
+    if (source && schema) {
+      const modulePathMap = createModulePathMap(
+        ts.createSourceFile(
+          uriToFsPath(textDocument.uri),
+          text,
+          ts.ScriptTarget.ES2015,
+          true,
+        ),
+      );
+      try {
+        const galleryDiagnostics = await findMediaGalleryIssues(
+          source,
+          schema,
+          modulePathMap,
+          service,
+        );
+        for (const issue of galleryDiagnostics) {
+          diagnostics.push({
+            severity: DiagnosticSeverity.Warning,
+            range: issue.range,
+            code: issue.code,
+            message: issue.message,
+            source: "val",
+            data: issue.data,
+          });
+        }
+      } catch (err) {
+        console.error("[mediaGalleryValidation] walker failed:", err);
       }
     }
   }
