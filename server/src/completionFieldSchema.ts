@@ -88,6 +88,39 @@ export function resolveSchemaAtFieldPath(
   return current;
 }
 
+/**
+ * If `fieldPath` ends in "href" and crosses a richtext schema, return the
+ * effective schema for that href slot based on `options.inline.a`.
+ *
+ * `a === true` is shorthand for `s.route()` with no include/exclude patterns.
+ * If val core later allows `a` to carry a SerializedSchema, that schema is
+ * returned as-is so the caller can branch on its type.
+ */
+export function resolveRichtextHrefSchema(
+  schema: SerializedSchema,
+  fieldPath: string[],
+): SerializedSchema | undefined {
+  if (fieldPath.length === 0) return undefined;
+  if (fieldPath[fieldPath.length - 1] !== "href") return undefined;
+  for (let i = fieldPath.length - 1; i >= 1; i--) {
+    const prefix = fieldPath.slice(0, i);
+    const resolved = resolveSchemaAtFieldPath(schema, prefix);
+    if (!resolved) continue;
+    if (resolved.type === "richtext") {
+      const a = (resolved as { options?: { inline?: { a?: unknown } } })
+        .options?.inline?.a;
+      if (a === true) {
+        return { type: "route", opt: false } as SerializedSchema;
+      }
+      if (a && typeof a === "object") {
+        return a as SerializedSchema;
+      }
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 function stepIntoSchema(
   schema: SerializedSchema | undefined,
   segment: string,
@@ -103,12 +136,22 @@ function stepIntoSchema(
     }
     return undefined;
   }
-  if (schema.type === "array" || schema.type === "record") {
+  if (schema.type === "array") {
+    // Array elements are not property assignments, so they contribute no
+    // segment to the AST-derived path. Treat array as transparent and try to
+    // step into its item with the same segment.
     const item =
       "item" in schema
         ? (schema as { item?: SerializedSchema }).item
         : undefined;
-    return item;
+    return stepIntoSchema(item, segment);
+  }
+  if (schema.type === "record") {
+    // Record entries are property assignments, so the record key has already
+    // consumed this step — return the item without re-matching the segment.
+    return "item" in schema
+      ? (schema as { item?: SerializedSchema }).item
+      : undefined;
   }
   if (schema.type === "union") {
     const options =
