@@ -23,7 +23,7 @@ describe("metadataUtils", () => {
           "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDAREAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCwAA8A/9k=",
           "base64",
         );
-        fs.writeFileSync(imagePath, jpegBuffer);
+        fs.writeFileSync(imagePath, new Uint8Array(jpegBuffer));
       }
 
       const metadata = getImageMetadata(imagePath);
@@ -59,7 +59,7 @@ describe("metadataUtils", () => {
           "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
           "base64",
         );
-        fs.writeFileSync(imagePath, pngBuffer);
+        fs.writeFileSync(imagePath, new Uint8Array(pngBuffer));
       }
 
       const metadata = getImageMetadata(imagePath);

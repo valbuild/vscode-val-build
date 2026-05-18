@@ -32,7 +32,7 @@ export function getImageMetadata(
 ): ImageMetadata | null {
   try {
     const buffer = readFileSync(absoluteFilePath);
-    const dimensions = sizeOf(buffer);
+    const dimensions = sizeOf(new Uint8Array(buffer));
 
     if (dimensions.type) {
       let mimeType = `image/${dimensions.type}`;
