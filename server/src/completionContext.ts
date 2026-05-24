@@ -4,7 +4,12 @@ import ts from "typescript";
  * Represents the context where completion was requested
  */
 export interface CompletionContext {
-  type: "none" | "unknown-string" | "c.image" | "c.file";
+  type:
+    | "none"
+    | "unknown-string"
+    | "content-property-key"
+    | "c.image"
+    | "c.file";
   // The position where completion was requested
   position: {
     line: number;
@@ -106,14 +111,22 @@ export function detectCompletionContext(
                 }
 
                 if (method.text === "define" && argIndex === 2) {
-                  // Third argument of c.define (the content object)
-                  // This string value could be:
-                  // - a route (if field schema is s.route())
-                  // - a keyOf (if field schema is s.keyOf())
-                  // - just a regular string
-                  // We can't determine which from AST alone, so we mark it as "unknown-string"
-                  // and let the providers check the schema at runtime
-                  context.type = "unknown-string";
+                  // Third argument of c.define (the content object).
+                  // A string literal here is either a property *key* or a
+                  // property *value*:
+                  // - key (the name of a property assignment): for an
+                  //   s.images()/s.files() gallery this is a file path, handled
+                  //   by the media gallery key provider.
+                  // - value: could be a route (s.route()), a keyOf (s.keyOf())
+                  //   or a regular string. We can't tell which from the AST
+                  //   alone, so we mark it "unknown-string" and let the
+                  //   providers check the schema at runtime.
+                  const isPropertyKey =
+                    ts.isPropertyAssignment(nodeAtPosition.parent) &&
+                    nodeAtPosition.parent.name === nodeAtPosition;
+                  context.type = isPropertyKey
+                    ? "content-property-key"
+                    : "unknown-string";
 
                   // Get the module path from first argument
                   if (args[0] && ts.isStringLiteral(args[0])) {

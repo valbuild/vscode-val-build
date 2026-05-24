@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import {
   FILE_REF_PROP,
   ModuleFilePath,
@@ -12,7 +14,30 @@ export type MediaGalleryDiagnosticCode =
   | "image:add-to-gallery"
   | "file:add-to-gallery"
   | "image:move-to-gallery-directory"
-  | "file:move-to-gallery-directory";
+  | "file:move-to-gallery-directory"
+  | "image:remove-gallery-entry"
+  | "file:remove-gallery-entry";
+
+/**
+ * Options controlling gallery-definition (record key) validation. When
+ * `valRoot` (or an explicit `fileExists`) is provided, keys defined in an
+ * s.images()/s.files() record are also checked for on-disk existence.
+ */
+export type MediaGalleryValidationOptions = {
+  valRoot?: string;
+  /** The file path (relative to valRoot) of the module being validated. */
+  moduleFilePath?: string;
+  /** Override for on-disk existence checks (relative public path -> exists). */
+  fileExists?: (relPath: string) => boolean;
+};
+
+function defaultFileExists(valRoot: string, relPath: string): boolean {
+  try {
+    return fs.statSync(path.join(valRoot, ...relPath.split("/"))).isFile();
+  } catch {
+    return false;
+  }
+}
 
 export type MediaGalleryDiagnostic = {
   code: MediaGalleryDiagnosticCode;
@@ -71,8 +96,17 @@ export async function findMediaGalleryIssues(
   schema: SerializedSchema,
   modulePathMap: ModulePathMap | undefined,
   service: ValService,
+  options?: MediaGalleryValidationOptions,
 ): Promise<MediaGalleryDiagnostic[]> {
   const diagnostics: MediaGalleryDiagnostic[] = [];
+
+  const fileExists: ((relPath: string) => boolean) | undefined =
+    options?.fileExists ??
+    (options?.valRoot
+      ? (relPath: string) =>
+          defaultFileExists(options.valRoot as string, relPath)
+      : undefined);
+  const moduleFilePath = options?.moduleFilePath ?? "";
 
   // Cache referenced module reads so we don't re-read for every entry
   const referencedModuleCache = new Map<
@@ -191,6 +225,61 @@ export async function findMediaGalleryIssues(
     }
   }
 
+  function checkGalleryKey(
+    recordModulePath: string,
+    key: string,
+    directory: string,
+    mediaType: "images" | "files",
+  ) {
+    // Remote refs and other non-local keys are not on-disk paths.
+    if (!key.startsWith("/")) {
+      return;
+    }
+    // The key is a record property whose name is a file path containing dots
+    // (the file extension). getModulePathRange() splits the module path on
+    // ".", which mangles such keys, so look the key up directly in the map.
+    const range = getGalleryKeyRange(modulePathMap, recordModulePath, key);
+    if (!range) {
+      return;
+    }
+    const kind: Mediakind = mediaType === "images" ? "image" : "file";
+
+    if (fileExists && !fileExists(key)) {
+      diagnostics.push({
+        code:
+          kind === "image"
+            ? "image:remove-gallery-entry"
+            : "file:remove-gallery-entry",
+        message: `${key} does not exist on disk. Remove it from the gallery or add the file.`,
+        range,
+        data: {
+          path: key,
+          referencedModuleFilePath: moduleFilePath,
+          targetDirectory: directory,
+          mediaType,
+        },
+      });
+      return;
+    }
+
+    if (!pathIsInsideDirectory(key, directory)) {
+      diagnostics.push({
+        code:
+          kind === "image"
+            ? "image:move-to-gallery-directory"
+            : "file:move-to-gallery-directory",
+        message: `${key} is not inside the gallery directory ${directory}. Move the ${kind} into the gallery directory.`,
+        range,
+        data: {
+          path: key,
+          referencedModuleFilePath: moduleFilePath,
+          targetDirectory: directory,
+          mediaType,
+        },
+      });
+    }
+  }
+
   async function walk(
     modulePath: string,
     src: Source,
@@ -229,6 +318,19 @@ export async function findMediaGalleryIssues(
       return;
     }
     if (sch.type === "record") {
+      const directory = getReferencedDirectory(sch);
+      const mediaType =
+        "mediaType" in sch &&
+        (sch.mediaType === "images" || sch.mediaType === "files")
+          ? (sch.mediaType as "images" | "files")
+          : undefined;
+      // This record is itself an s.images()/s.files() gallery definition — its
+      // keys are file paths that must live inside the configured directory.
+      if (directory && mediaType && isPlainObject(src)) {
+        for (const key of Object.keys(src)) {
+          checkGalleryKey(modulePath, key, directory, mediaType);
+        }
+      }
       const item =
         "item" in sch ? (sch.item as SerializedSchema | undefined) : undefined;
       if (!item || !isPlainObject(src)) return;
@@ -265,4 +367,49 @@ export async function findMediaGalleryIssues(
 function appendSegment(modulePath: string, segment: string | number): string {
   const encoded = JSON.stringify(segment);
   return modulePath ? `${modulePath}.${encoded}` : encoded;
+}
+
+/**
+ * Resolve the source range of a record `key` (a file path that may contain
+ * dots) without round-tripping through getModulePathRange's dot-splitting.
+ * Gallery records are defined at the module root, so the key is a direct child
+ * of the content object; for the (uncommon) nested case we fall back to the
+ * record's node found via getModulePathRange on the record path itself.
+ */
+function getGalleryKeyRange(
+  modulePathMap: ModulePathMap | undefined,
+  recordModulePath: string,
+  key: string,
+):
+  | {
+      start: { line: number; character: number };
+      end: { line: number; character: number };
+    }
+  | undefined {
+  if (!modulePathMap) {
+    return undefined;
+  }
+  let nodeMap: ModulePathMap = modulePathMap;
+  if (recordModulePath !== "") {
+    // Best-effort navigation for nested records; the record path segments are
+    // schema field names which do not normally contain dots.
+    const range = getModulePathRange(recordModulePath, modulePathMap);
+    if (!range) {
+      return undefined;
+    }
+    let cursor: ModulePathMap[string] | undefined;
+    for (const segment of recordModulePath
+      .split(".")
+      .map((s) => JSON.parse(s) as string | number)) {
+      cursor = cursor ? cursor.children?.[segment] : modulePathMap[segment];
+      if (!cursor) {
+        return undefined;
+      }
+    }
+    nodeMap = (cursor?.children ?? {}) as ModulePathMap;
+  }
+  const entry = nodeMap[key];
+  return entry?.start && entry?.end
+    ? { start: entry.start, end: entry.end }
+    : undefined;
 }

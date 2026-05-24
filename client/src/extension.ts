@@ -19,6 +19,7 @@ import { downloadRemoteFileCommand } from "./commands/downloadRemoteFile";
 import { addModuleToValModulesCommand } from "./commands/addModuleToValModules";
 import { addToMediaGalleryCommand } from "./commands/addToMediaGallery";
 import { moveFileToGalleryDirectoryCommand } from "./commands/moveFileToGalleryDirectory";
+import { removeGalleryEntryCommand } from "./commands/removeGalleryEntry";
 
 let client: LanguageClient;
 let statusBarItem: vscode.StatusBarItem;
@@ -69,6 +70,10 @@ export function activate(context: ExtensionContext) {
     vscode.commands.registerCommand(
       "val.moveFileToGalleryDirectory",
       moveFileToGalleryDirectoryCommand,
+    ),
+    vscode.commands.registerCommand(
+      "val.removeGalleryEntry",
+      removeGalleryEntryCommand,
     ),
   );
   updateStatusBar(statusBarItem, currentProjectDir);
@@ -277,6 +282,25 @@ export class ValActionProvider implements vscode.CodeActionProvider {
             {
               uri: document.uri,
               range: diag.range,
+              data: (diag as any).data,
+            },
+          ],
+        };
+        actions.push(fix);
+      } else if (
+        diag.code === "image:remove-gallery-entry" ||
+        diag.code === "file:remove-gallery-entry"
+      ) {
+        const fix = new vscode.CodeAction(
+          "Remove entry from gallery",
+          vscode.CodeActionKind.QuickFix,
+        );
+        fix.command = {
+          title: "Remove entry from gallery",
+          command: "val.removeGalleryEntry",
+          arguments: [
+            {
+              uri: document.uri,
               data: (diag as any).data,
             },
           ],

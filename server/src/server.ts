@@ -1334,6 +1334,9 @@ async function validateTextDocumentInternal(
           schema,
           modulePathMap,
           service,
+          valRoot
+            ? { valRoot, moduleFilePath: fsPath.replace(valRoot, "") }
+            : undefined,
         );
         for (const issue of galleryDiagnostics) {
           diagnostics.push({

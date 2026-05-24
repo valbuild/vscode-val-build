@@ -26,6 +26,41 @@ export class PublicValFilesCache {
   }
 
   /**
+   * List files inside an arbitrary directory (relative to the val root), e.g.
+   * a gallery's configured `directory` which may live outside /public/val.
+   * Scans on demand — used for media gallery key completions.
+   * Returns paths in `${directory}/...` format.
+   */
+  async listFilesInDirectory(
+    valRoot: string,
+    directory: string,
+  ): Promise<string[]> {
+    const normalizedDir = directory.replace(/\/+$/, "");
+    const absDir = path.join(valRoot, ...normalizedDir.split("/"));
+
+    if (!fs.existsSync(absDir)) {
+      return [];
+    }
+
+    try {
+      const files = await glob("**/*", {
+        cwd: absDir,
+        nodir: true,
+        absolute: false,
+      });
+      return files.map(
+        (file) => `${normalizedDir}/${file.split(path.sep).join("/")}`,
+      );
+    } catch (error) {
+      console.error(
+        `[PublicValFilesCache] Error scanning ${absDir}:`,
+        error,
+      );
+      return [];
+    }
+  }
+
+  /**
    * Update cache for a val root by scanning /public/val directory
    */
   private async updateCache(valRoot: string): Promise<void> {

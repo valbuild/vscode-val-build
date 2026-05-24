@@ -199,6 +199,144 @@ describe("findMediaGalleryIssues", () => {
     expect(diagnostics[0].data.targetDirectory).toBe("/public/val/images");
   });
 
+  describe("gallery definition keys", () => {
+    // Build a module path map for a gallery c.define whose content object has
+    // the given keys.
+    function galleryMap(keys: string[]) {
+      const body = keys
+        .map(
+          (k) =>
+            `  ${JSON.stringify(k)}: { width: 1, height: 1, mimeType: "image/png" }`,
+        )
+        .join(",\n");
+      return createModulePathMap(
+        ts.createSourceFile(
+          "media.val.ts",
+          `export default c.define("/content/media.val.ts", schema, {\n${body},\n});`,
+          ts.ScriptTarget.ES2015,
+          true,
+        ),
+      );
+    }
+
+    const meta = { width: 1, height: 1, mimeType: "image/png" };
+
+    it("emits nothing when a key is inside the directory and the file exists", async () => {
+      const { schema } = imagesGallery({}, "/public/val/images");
+      const source = {
+        "/public/val/images/logo.png": meta,
+      } as unknown as Source;
+      const diagnostics = await findMediaGalleryIssues(
+        source,
+        schema,
+        galleryMap(["/public/val/images/logo.png"]),
+        makeService({}),
+        {
+          valRoot: "/repo",
+          moduleFilePath: "/content/media.val.ts",
+          fileExists: () => true,
+        },
+      );
+      expect(diagnostics).toEqual([]);
+    });
+
+    it("emits image:move-to-gallery-directory for a key outside the directory", async () => {
+      const { schema } = imagesGallery({}, "/public/val/images");
+      const source = {
+        "/public/val/logo.png": meta,
+      } as unknown as Source;
+      const diagnostics = await findMediaGalleryIssues(
+        source,
+        schema,
+        galleryMap(["/public/val/logo.png"]),
+        makeService({}),
+        {
+          valRoot: "/repo",
+          moduleFilePath: "/content/media.val.ts",
+          fileExists: () => true,
+        },
+      );
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0].code).toBe("image:move-to-gallery-directory");
+      expect(diagnostics[0].data.path).toBe("/public/val/logo.png");
+      expect(diagnostics[0].data.targetDirectory).toBe("/public/val/images");
+    });
+
+    it("emits image:remove-gallery-entry for a key whose file is missing", async () => {
+      const { schema } = imagesGallery({}, "/public/val/images");
+      const source = {
+        "/public/val/images/ghost.png": meta,
+      } as unknown as Source;
+      const diagnostics = await findMediaGalleryIssues(
+        source,
+        schema,
+        galleryMap(["/public/val/images/ghost.png"]),
+        makeService({}),
+        {
+          valRoot: "/repo",
+          moduleFilePath: "/content/media.val.ts",
+          fileExists: () => false,
+        },
+      );
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0].code).toBe("image:remove-gallery-entry");
+      expect(diagnostics[0].data.path).toBe("/public/val/images/ghost.png");
+    });
+
+    it("supports gallery directories outside /public/val", async () => {
+      const { schema } = imagesGallery({}, "/public/images");
+      const source = {
+        "/public/images/logo.png": meta,
+      } as unknown as Source;
+      const diagnostics = await findMediaGalleryIssues(
+        source,
+        schema,
+        galleryMap(["/public/images/logo.png"]),
+        makeService({}),
+        {
+          valRoot: "/repo",
+          moduleFilePath: "/content/media.val.ts",
+          fileExists: () => true,
+        },
+      );
+      expect(diagnostics).toEqual([]);
+    });
+
+    it("ignores remote/non-path keys", async () => {
+      const { schema } = imagesGallery({}, "/public/val/images");
+      const source = {
+        "remote://val/abc123": meta,
+      } as unknown as Source;
+      const diagnostics = await findMediaGalleryIssues(
+        source,
+        schema,
+        galleryMap(["remote://val/abc123"]),
+        makeService({}),
+        {
+          valRoot: "/repo",
+          moduleFilePath: "/content/media.val.ts",
+          fileExists: () => false,
+        },
+      );
+      expect(diagnostics).toEqual([]);
+    });
+
+    it("checks directory membership even without a valRoot (no existence check)", async () => {
+      const { schema } = imagesGallery({}, "/public/val/images");
+      const source = {
+        "/public/val/logo.png": meta,
+      } as unknown as Source;
+      const diagnostics = await findMediaGalleryIssues(
+        source,
+        schema,
+        galleryMap(["/public/val/logo.png"]),
+        makeService({}),
+      );
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0].code).toBe("image:move-to-gallery-directory");
+    });
+  });
+
   it("does not emit anything for image fields without referencedModule", async () => {
     const schema: SerializedSchema = {
       type: "object",

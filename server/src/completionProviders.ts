@@ -25,6 +25,18 @@ import {
   resolveSchemaAtFieldPath,
 } from "./completionFieldSchema";
 
+const IMAGE_EXTENSIONS = [
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".svg",
+  ".webp",
+  ".avif",
+  ".ico",
+  ".bmp",
+];
+
 /**
  * Get sourcePath from a keyOf schema
  */
@@ -605,6 +617,114 @@ async function resolveReferencedGallery(
 }
 
 /**
+ * Media gallery key completion provider
+ * Provides autocomplete for the keys of an s.images()/s.files() record
+ * (c.define content object). Keys are file paths that must live inside the
+ * gallery's configured `directory`, so we suggest the real files found there.
+ */
+export class MediaGalleryKeyCompletionProvider implements CompletionProvider {
+  contextType: CompletionContext["type"] = "content-property-key";
+  private cache: PublicValFilesCache;
+
+  constructor(cache: PublicValFilesCache) {
+    this.cache = cache;
+  }
+
+  async provideCompletionItems(
+    context: CompletionContext,
+    service: ValService,
+    valRoot: string,
+    sourceFile?: ts.SourceFile,
+  ): Promise<CompletionItem[]> {
+    try {
+      if (!context.modulePath || !context.stringNode || !sourceFile) {
+        return [];
+      }
+
+      const result = await service.read(
+        context.modulePath as ModuleFilePath,
+        "" as ModulePath,
+      );
+      if (!result || !result.schema) {
+        return [];
+      }
+
+      const fieldInfo = getFieldPathFromCDefine(context.stringNode);
+      if (!fieldInfo) {
+        return [];
+      }
+
+      // The field path includes the key currently being typed as its last
+      // segment — drop it to resolve the schema of the *containing* record.
+      const containerPath = fieldInfo.fieldPath.slice(0, -1);
+      const containerSchema = resolveSchemaAtFieldPath(
+        result.schema,
+        containerPath,
+      );
+      if (!containerSchema || containerSchema.type !== "record") {
+        return [];
+      }
+      const mediaType =
+        "mediaType" in containerSchema &&
+        (containerSchema.mediaType === "images" ||
+          containerSchema.mediaType === "files")
+          ? (containerSchema.mediaType as "images" | "files")
+          : undefined;
+      const directory =
+        "directory" in containerSchema &&
+        typeof containerSchema.directory === "string"
+          ? containerSchema.directory
+          : undefined;
+      if (!mediaType || !directory) {
+        return [];
+      }
+
+      let files = await this.cache.listFilesInDirectory(valRoot, directory);
+      if (mediaType === "images") {
+        files = files.filter((file) =>
+          IMAGE_EXTENSIONS.some((ext) => file.toLowerCase().endsWith(ext)),
+        );
+      }
+
+      // Exclude keys already registered in the gallery.
+      if (
+        result.source &&
+        typeof result.source === "object" &&
+        !Array.isArray(result.source)
+      ) {
+        const registered = new Set(Object.keys(result.source));
+        files = files.filter((file) => !registered.has(file));
+      }
+
+      const stringStart = context.stringNode.getStart(sourceFile);
+      const stringEnd = context.stringNode.getEnd();
+      const startPos = sourceFile.getLineAndCharacterOfPosition(stringStart + 1);
+      const endPos = sourceFile.getLineAndCharacterOfPosition(stringEnd - 1);
+      const replaceRange = Range.create(
+        Position.create(startPos.line, startPos.character),
+        Position.create(endPos.line, endPos.character),
+      );
+
+      return files.map((file) => {
+        const item: CompletionItem = {
+          label: file,
+          kind: CompletionItemKind.File,
+          detail:
+            mediaType === "images"
+              ? `Image in gallery directory ${directory}`
+              : `File in gallery directory ${directory}`,
+        };
+        item.textEdit = TextEdit.replace(replaceRange, file);
+        return item;
+      });
+    } catch (error) {
+      console.error("Error providing media gallery key completion:", error);
+      return [];
+    }
+  }
+}
+
+/**
  * Registry of all completion providers
  */
 export class CompletionProviderRegistry {
@@ -618,6 +738,7 @@ export class CompletionProviderRegistry {
     this.register(new KeyOfCompletionProvider());
     this.register(new ImagePathCompletionProvider(cache));
     this.register(new FilePathCompletionProvider(cache));
+    this.register(new MediaGalleryKeyCompletionProvider(cache));
   }
 
   /**
