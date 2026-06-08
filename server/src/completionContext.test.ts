@@ -44,6 +44,44 @@ describe("completionContext", () => {
       assert.ok(context.partialText?.startsWith("/m"));
     });
 
+    it("should detect content-property-key context for a property name string", () => {
+      const code = `export default c.define("/content/media.val.ts", s.images({ accept: "image/*", directory: "/public/val/images" }), {"/public/val/images/logo.png": {}});`;
+      const sourceFile = ts.createSourceFile(
+        "media.val.ts",
+        code,
+        ts.ScriptTarget.Latest,
+        true,
+      );
+
+      // Position inside the property *key* string
+      const keyIndex = code.indexOf('"/public/val/images/logo.png"');
+      const context = detectCompletionContext(sourceFile, {
+        line: 0,
+        character: keyIndex + 5,
+      });
+
+      assert.strictEqual(context.type, "content-property-key");
+      assert.strictEqual(context.modulePath, "/content/media.val.ts");
+    });
+
+    it("should detect unknown-string (not key) for a property value string", () => {
+      const code = `export default c.define("/test.val.ts", s.object({route: s.route()}), {route: "/main"});`;
+      const sourceFile = ts.createSourceFile(
+        "test.val.ts",
+        code,
+        ts.ScriptTarget.Latest,
+        true,
+      );
+
+      const mainIndex = code.indexOf('"/main"');
+      const context = detectCompletionContext(sourceFile, {
+        line: 0,
+        character: mainIndex + 3,
+      });
+
+      assert.strictEqual(context.type, "unknown-string");
+    });
+
     it("should NOT detect route context in c.define path argument", () => {
       const code = `export default c.define("/test.val.ts", s.object({}), {});`;
       const sourceFile = ts.createSourceFile(

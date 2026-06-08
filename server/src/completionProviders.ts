@@ -19,6 +19,23 @@ import {
   SerializedRegExpPattern,
 } from "./routeValidation";
 import { PublicValFilesCache } from "./publicValFilesCache";
+import {
+  getFieldPathFromCDefine,
+  resolveRichtextHrefSchema,
+  resolveSchemaAtFieldPath,
+} from "./completionFieldSchema";
+
+const IMAGE_EXTENSIONS = [
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".svg",
+  ".webp",
+  ".avif",
+  ".ico",
+  ".bmp",
+];
 
 /**
  * Get sourcePath from a keyOf schema
@@ -80,75 +97,44 @@ export class RouteCompletionProvider implements CompletionProvider {
     sourceFile?: ts.SourceFile,
   ): Promise<CompletionItem[]> {
     try {
-      console.log("[RouteCompletionProvider] Starting completion");
-
-      // We need to:
-      // 1. Read the module to get its schema
-      // 2. Find the field path where the cursor is
-      // 3. Check if that field's schema type is "route"
-      // 4. Get include/exclude patterns from the route schema
-      // 5. Collect all routes from router modules
-      // 6. Filter by include/exclude patterns
-
       if (!context.modulePath || !context.stringNode || !sourceFile) {
-        console.log("[RouteCompletionProvider] Missing required context");
         return [];
       }
 
-      // Read the current module to get its schema
       const moduleFilePath = context.modulePath as any;
-      console.log("[RouteCompletionProvider] Reading module:", moduleFilePath);
       const result = await service.read(moduleFilePath, "" as any);
 
       if (!result || !result.schema) {
-        console.log("[RouteCompletionProvider] No schema found in result");
         return [];
       }
 
-      // Find which field in the content object the user is editing
-      const fieldName = this.findFieldName(context.stringNode, sourceFile);
-      console.log("[RouteCompletionProvider] Field name:", fieldName);
-
-      if (!fieldName) {
-        console.log("[RouteCompletionProvider] Could not determine field name");
+      const fieldInfo = getFieldPathFromCDefine(context.stringNode);
+      if (!fieldInfo) {
         return [];
       }
 
-      // Get the schema for this specific field (handles nested fields)
-      const fieldSchema = this.getFieldSchemaRecursive(
+      let fieldSchema = resolveSchemaAtFieldPath(
         result.schema,
-        fieldName,
+        fieldInfo.fieldPath,
       );
-      console.log(
-        "[RouteCompletionProvider] Field schema type:",
-        fieldSchema?.type,
-      );
-
       if (!fieldSchema || fieldSchema.type !== "route") {
-        console.log("[RouteCompletionProvider] Not a route field, skipping");
-        return []; // Not a route field
+        fieldSchema = resolveRichtextHrefSchema(
+          result.schema,
+          fieldInfo.fieldPath,
+        );
+      }
+      if (!fieldSchema || fieldSchema.type !== "route") {
+        return [];
       }
 
-      // Extract include/exclude patterns from the route schema
       const includePattern = (
         "include" in fieldSchema ? fieldSchema.include : undefined
       ) as SerializedRegExpPattern | undefined;
       const excludePattern = (
         "exclude" in fieldSchema ? fieldSchema.exclude : undefined
       ) as SerializedRegExpPattern | undefined;
-      console.log("[RouteCompletionProvider] Patterns:", {
-        includePattern,
-        excludePattern,
-      });
 
-      // Get all modules
-      console.log("[RouteCompletionProvider] Getting all modules");
       const allModules = await service.getAllModules();
-      console.log(
-        "[RouteCompletionProvider] Found",
-        allModules.length,
-        "total modules",
-      );
 
       // Find modules with routers and collect their routes (use Set for deduplication)
       const routesSet = new Set<string>();
@@ -162,222 +148,50 @@ export class RouteCompletionProvider implements CompletionProvider {
           typeof module.source === "object" &&
           !Array.isArray(module.source)
         ) {
-          // Add all routes from this router module
           const source = module.source as Record<string, unknown>;
-          const routes = Object.keys(source);
-          console.log(
-            "[RouteCompletionProvider] Found router module:",
-            module.path,
-            "with routes:",
-            routes,
-          );
-          for (const route of routes) {
+          for (const route of Object.keys(source)) {
             routesSet.add(route);
           }
         }
       }
 
-      // Convert Set to array for filtering
       const allRoutes = Array.from(routesSet);
-      console.log(
-        "[RouteCompletionProvider] Total unique routes collected:",
-        allRoutes.length,
-        allRoutes,
-      );
-
-      // Filter routes by include/exclude patterns
       const filteredRoutes = filterRoutesByPatterns(
         allRoutes,
         includePattern,
         excludePattern,
       );
-      console.log(
-        "[RouteCompletionProvider] Filtered routes:",
-        filteredRoutes.length,
-        filteredRoutes,
-      );
 
-      // Calculate the range to replace (the entire string content, excluding quotes)
       let replaceRange: Range | undefined;
       if (context.stringNode && sourceFile) {
         const stringStart = context.stringNode.getStart(sourceFile);
         const stringEnd = context.stringNode.getEnd();
-
-        // +1 to skip opening quote, -1 to skip closing quote
         const contentStart = stringStart + 1;
         const contentEnd = stringEnd - 1;
-
         const startPos = sourceFile.getLineAndCharacterOfPosition(contentStart);
         const endPos = sourceFile.getLineAndCharacterOfPosition(contentEnd);
-
         replaceRange = Range.create(
           Position.create(startPos.line, startPos.character),
           Position.create(endPos.line, endPos.character),
         );
       }
 
-      // Convert filtered routes to completion items
-      const items: CompletionItem[] = filteredRoutes.map((route) => {
+      return filteredRoutes.map((route) => {
         const item: CompletionItem = {
           label: route,
           kind: CompletionItemKind.Value,
           detail: "Route",
           documentation: `Available route: ${route}`,
         };
-
-        // Add textEdit to replace the entire string content
         if (replaceRange) {
           item.textEdit = TextEdit.replace(replaceRange, route);
         }
-
         return item;
       });
-
-      console.log(
-        "[RouteCompletionProvider] Returning",
-        items.length,
-        "completion items",
-      );
-      return items;
     } catch (error) {
       console.error("Error providing route completion:", error);
       return [];
     }
-  }
-
-  /**
-   * Find the field name in the content object where the cursor is positioned
-   */
-  private findFieldName(
-    stringNode: ts.StringLiteral,
-    sourceFile: ts.SourceFile,
-  ): string | undefined {
-    // Walk up the AST to find the property assignment
-    let parent = stringNode.parent;
-    while (parent) {
-      if (ts.isPropertyAssignment(parent)) {
-        const name = parent.name;
-        if (ts.isIdentifier(name)) {
-          return name.text;
-        } else if (ts.isStringLiteral(name)) {
-          return name.text;
-        }
-      }
-      parent = parent.parent;
-    }
-    return undefined;
-  }
-
-  /**
-   * Get the schema for a specific field in the content object
-   */
-  private getFieldSchema(
-    schema: SerializedSchema,
-    fieldName: string,
-  ): SerializedSchema | undefined {
-    if (schema.type === "object") {
-      const items = "items" in schema ? schema.items : undefined;
-      if (items && typeof items === "object" && fieldName in items) {
-        return items[fieldName] as SerializedSchema;
-      }
-    }
-    return undefined;
-  }
-
-  /**
-   * Recursively search for a field with the given name in nested schemas
-   * This handles fields nested in arrays and objects
-   */
-  private getFieldSchemaRecursive(
-    schema: SerializedSchema,
-    fieldName: string,
-    depth: number = 0,
-  ): SerializedSchema | undefined {
-    const indent = "  ".repeat(depth);
-    console.log(
-      `${indent}[RouteCompletionProvider.recurse] type: ${schema.type}, looking for: "${fieldName}"`,
-    );
-
-    // Check if this is an object with the field
-    if (schema.type === "object") {
-      const items = "items" in schema ? schema.items : undefined;
-      if (items && typeof items === "object") {
-        console.log(`${indent}  Object fields:`, Object.keys(items));
-        if (fieldName in items) {
-          console.log(`${indent}  ✓ Found "${fieldName}"!`);
-          return items[fieldName] as SerializedSchema;
-        }
-        // Recursively search in nested objects
-        for (const key in items) {
-          const result = this.getFieldSchemaRecursive(
-            items[key] as SerializedSchema,
-            fieldName,
-            depth + 1,
-          );
-          if (result) return result;
-        }
-      }
-    }
-
-    // Check if this is an array, search in its items
-    if (schema.type === "array") {
-      const item = "item" in schema ? schema.item : undefined;
-      if (item) {
-        console.log(`${indent}  Searching array item`);
-        return this.getFieldSchemaRecursive(
-          item as SerializedSchema,
-          fieldName,
-          depth + 1,
-        );
-      }
-    }
-
-    // Check if this is a record, search in its items
-    if (schema.type === "record") {
-      const item = "item" in schema ? schema.item : undefined;
-      if (item) {
-        console.log(`${indent}  Searching record item`);
-        return this.getFieldSchemaRecursive(
-          item as SerializedSchema,
-          fieldName,
-          depth + 1,
-        );
-      }
-    }
-
-    // Check if this is a union, search in all options/items
-    if (schema.type === "union") {
-      // Union can have either "options" or "items" property depending on the version
-      const unionItems =
-        ("options" in schema ? schema.options : undefined) ||
-        ("items" in schema ? schema.items : undefined);
-
-      if (unionItems && Array.isArray(unionItems)) {
-        console.log(
-          `${indent}  Union with ${unionItems.length} items, searching each`,
-        );
-        for (let i = 0; i < unionItems.length; i++) {
-          const option = unionItems[i];
-          console.log(
-            `${indent}  Searching union item ${i + 1}/${
-              unionItems.length
-            } (type: ${(option as SerializedSchema).type})`,
-          );
-          const result = this.getFieldSchemaRecursive(
-            option as SerializedSchema,
-            fieldName,
-            depth + 1,
-          );
-          if (result) return result;
-        }
-      } else {
-        console.log(
-          `${indent}  ⚠️  Union doesn't have valid options/items array!`,
-        );
-      }
-    }
-
-    return undefined;
   }
 }
 
@@ -399,7 +213,6 @@ export class KeyOfCompletionProvider implements CompletionProvider {
         return [];
       }
 
-      // Read the current module to get its schema
       const moduleFilePath = context.modulePath as any;
       const result = await service.read(moduleFilePath, "" as any);
 
@@ -407,21 +220,18 @@ export class KeyOfCompletionProvider implements CompletionProvider {
         return [];
       }
 
-      // Find which field in the content object the user is editing
-      const fieldName = this.findFieldName(context.stringNode, sourceFile);
-
-      if (!fieldName) {
+      const fieldInfo = getFieldPathFromCDefine(context.stringNode);
+      if (!fieldInfo) {
         return [];
       }
 
-      // Get the schema for this specific field (handles nested fields)
-      const fieldSchema = this.getFieldSchemaRecursive(
+      const fieldSchema = resolveSchemaAtFieldPath(
         result.schema,
-        fieldName,
+        fieldInfo.fieldPath,
       );
 
       if (!fieldSchema || fieldSchema.type !== "keyOf") {
-        return []; // Not a keyOf field
+        return [];
       }
 
       // Get the sourcePath from the keyOf schema
@@ -490,113 +300,6 @@ export class KeyOfCompletionProvider implements CompletionProvider {
       return [];
     }
   }
-
-  /**
-   * Find the field name in the content object where the cursor is positioned
-   */
-  private findFieldName(
-    stringNode: ts.StringLiteral,
-    sourceFile: ts.SourceFile,
-  ): string | undefined {
-    // Walk up the AST to find the property assignment
-    let parent = stringNode.parent;
-    while (parent) {
-      if (ts.isPropertyAssignment(parent)) {
-        const name = parent.name;
-        if (ts.isIdentifier(name)) {
-          return name.text;
-        } else if (ts.isStringLiteral(name)) {
-          return name.text;
-        }
-      }
-      parent = parent.parent;
-    }
-    return undefined;
-  }
-
-  /**
-   * Get the schema for a specific field in the content object
-   */
-  private getFieldSchema(
-    schema: SerializedSchema,
-    fieldName: string,
-  ): SerializedSchema | undefined {
-    if (schema.type === "object") {
-      const items = "items" in schema ? schema.items : undefined;
-      if (items && typeof items === "object" && fieldName in items) {
-        return items[fieldName] as SerializedSchema;
-      }
-    }
-    return undefined;
-  }
-
-  /**
-   * Recursively search for a field with the given name in nested schemas
-   * This handles fields nested in arrays and objects
-   */
-  private getFieldSchemaRecursive(
-    schema: SerializedSchema,
-    fieldName: string,
-  ): SerializedSchema | undefined {
-    // Check if this is an object with the field
-    if (schema.type === "object") {
-      const items = "items" in schema ? schema.items : undefined;
-      if (items && typeof items === "object") {
-        if (fieldName in items) {
-          return items[fieldName] as SerializedSchema;
-        }
-        // Recursively search in nested objects
-        for (const key in items) {
-          const result = this.getFieldSchemaRecursive(
-            items[key] as SerializedSchema,
-            fieldName,
-          );
-          if (result) return result;
-        }
-      }
-    }
-
-    // Check if this is an array, search in its items
-    if (schema.type === "array") {
-      const item = "item" in schema ? schema.item : undefined;
-      if (item) {
-        return this.getFieldSchemaRecursive(
-          item as SerializedSchema,
-          fieldName,
-        );
-      }
-    }
-
-    // Check if this is a record, search in its items
-    if (schema.type === "record") {
-      const item = "item" in schema ? schema.item : undefined;
-      if (item) {
-        return this.getFieldSchemaRecursive(
-          item as SerializedSchema,
-          fieldName,
-        );
-      }
-    }
-
-    // Check if this is a union, search in all options/items
-    if (schema.type === "union") {
-      // Union can have either "options" or "items" property depending on the version
-      const unionItems =
-        ("options" in schema ? schema.options : undefined) ||
-        ("items" in schema ? schema.items : undefined);
-      if (unionItems && Array.isArray(unionItems)) {
-        for (const option of unionItems) {
-          const result = this.getFieldSchemaRecursive(
-            option as SerializedSchema,
-            fieldName,
-          );
-          if (result) return result;
-        }
-      }
-    }
-
-    return undefined;
-  }
 }
 
 /**
@@ -619,11 +322,27 @@ export class ImagePathCompletionProvider implements CompletionProvider {
   ): Promise<CompletionItem[]> {
     console.log("[ImagePathCompletionProvider] Starting completion");
 
+    const galleryInfo = await resolveReferencedGallery(
+      context,
+      sourceFile,
+      service,
+    );
+
     // Get all files from /public/val directory
-    const files = this.cache.getFiles(valRoot);
+    let files = this.cache.getFiles(valRoot);
     console.log(
       `[ImagePathCompletionProvider] Found ${files.length} files in cache`,
     );
+
+    if (galleryInfo) {
+      const prefix = galleryInfo.directory + "/";
+      files = files.filter(
+        (f) => f === galleryInfo.directory || f.startsWith(prefix),
+      );
+      console.log(
+        `[ImagePathCompletionProvider] Filtered to gallery directory ${galleryInfo.directory}: ${files.length} files`,
+      );
+    }
 
     // Filter to image files only (common image extensions)
     const imageExtensions = [
@@ -647,10 +366,15 @@ export class ImagePathCompletionProvider implements CompletionProvider {
 
     // Create completion items
     const items: CompletionItem[] = imageFiles.map((file) => {
+      const detail = galleryInfo
+        ? galleryInfo.registered.has(file)
+          ? `Already in gallery ${galleryInfo.referencedModuleFilePath}`
+          : `Not yet in gallery — fix will add it to ${galleryInfo.referencedModuleFilePath}`
+        : "Image file from /public/val";
       const item: CompletionItem = {
         label: file,
         kind: CompletionItemKind.File,
-        detail: "Image file from /public/val",
+        detail,
         data: {
           type: "image",
           filePath: file,
@@ -723,18 +447,39 @@ export class FilePathCompletionProvider implements CompletionProvider {
   ): Promise<CompletionItem[]> {
     console.log("[FilePathCompletionProvider] Starting completion");
 
+    const galleryInfo = await resolveReferencedGallery(
+      context,
+      sourceFile,
+      service,
+    );
+
     // Get all files from /public/val directory
-    const files = this.cache.getFiles(valRoot);
+    let files = this.cache.getFiles(valRoot);
     console.log(
       `[FilePathCompletionProvider] Found ${files.length} files in cache`,
     );
 
+    if (galleryInfo) {
+      const prefix = galleryInfo.directory + "/";
+      files = files.filter(
+        (f) => f === galleryInfo.directory || f.startsWith(prefix),
+      );
+      console.log(
+        `[FilePathCompletionProvider] Filtered to gallery directory ${galleryInfo.directory}: ${files.length} files`,
+      );
+    }
+
     // Create completion items for all files
     const items: CompletionItem[] = files.map((file) => {
+      const detail = galleryInfo
+        ? galleryInfo.registered.has(file)
+          ? `Already in gallery ${galleryInfo.referencedModuleFilePath}`
+          : `Not yet in gallery — fix will add it to ${galleryInfo.referencedModuleFilePath}`
+        : "File from /public/val";
       const item: CompletionItem = {
         label: file,
         kind: CompletionItemKind.File,
-        detail: "File from /public/val",
+        detail,
         data: {
           type: "file",
           filePath: file,
@@ -788,6 +533,198 @@ export class FilePathCompletionProvider implements CompletionProvider {
 }
 
 /**
+ * If the c.image/c.file call expression in `context` lives under a c.define
+ * whose field schema references a media gallery module (s.image(mediaVal)),
+ * return the gallery directory and registered file set so the caller can
+ * filter completions.
+ */
+async function resolveReferencedGallery(
+  context: CompletionContext,
+  sourceFile: ts.SourceFile | undefined,
+  service: ValService,
+): Promise<
+  | {
+      referencedModuleFilePath: string;
+      directory: string;
+      registered: Set<string>;
+    }
+  | undefined
+> {
+  if (!sourceFile || !context.callExpression) return undefined;
+  const fieldInfo = getFieldPathFromCDefine(context.callExpression);
+  if (!fieldInfo || !fieldInfo.moduleFilePath) return undefined;
+
+  let containingModule: { schema?: SerializedSchema; source?: unknown };
+  try {
+    containingModule = await service.read(
+      fieldInfo.moduleFilePath as ModuleFilePath,
+      "" as ModulePath,
+    );
+  } catch (err) {
+    console.error(
+      "[completionProviders] Failed to read containing module for gallery resolution:",
+      err,
+    );
+    return undefined;
+  }
+  if (!containingModule.schema) return undefined;
+  const fieldSchema = resolveSchemaAtFieldPath(
+    containingModule.schema,
+    fieldInfo.fieldPath,
+  );
+  if (!fieldSchema) return undefined;
+  if (fieldSchema.type !== "image" && fieldSchema.type !== "file") {
+    return undefined;
+  }
+  const referencedModule = (fieldSchema as { referencedModule?: string })
+    .referencedModule;
+  if (!referencedModule) return undefined;
+
+  let referenced: { schema?: SerializedSchema; source?: unknown };
+  try {
+    referenced = await service.read(
+      referencedModule as ModuleFilePath,
+      "" as ModulePath,
+    );
+  } catch (err) {
+    console.error(
+      "[completionProviders] Failed to read referenced gallery module:",
+      err,
+    );
+    return undefined;
+  }
+  const refSchema = referenced.schema;
+  if (!refSchema || refSchema.type !== "record") return undefined;
+  if (!("directory" in refSchema) || typeof refSchema.directory !== "string") {
+    return undefined;
+  }
+  const directory = refSchema.directory;
+  const registered = new Set<string>();
+  if (
+    referenced.source &&
+    typeof referenced.source === "object" &&
+    !Array.isArray(referenced.source)
+  ) {
+    for (const key of Object.keys(referenced.source)) {
+      registered.add(key);
+    }
+  }
+  return {
+    referencedModuleFilePath: referencedModule,
+    directory,
+    registered,
+  };
+}
+
+/**
+ * Media gallery key completion provider
+ * Provides autocomplete for the keys of an s.images()/s.files() record
+ * (c.define content object). Keys are file paths that must live inside the
+ * gallery's configured `directory`, so we suggest the real files found there.
+ */
+export class MediaGalleryKeyCompletionProvider implements CompletionProvider {
+  contextType: CompletionContext["type"] = "content-property-key";
+  private cache: PublicValFilesCache;
+
+  constructor(cache: PublicValFilesCache) {
+    this.cache = cache;
+  }
+
+  async provideCompletionItems(
+    context: CompletionContext,
+    service: ValService,
+    valRoot: string,
+    sourceFile?: ts.SourceFile,
+  ): Promise<CompletionItem[]> {
+    try {
+      if (!context.modulePath || !context.stringNode || !sourceFile) {
+        return [];
+      }
+
+      const result = await service.read(
+        context.modulePath as ModuleFilePath,
+        "" as ModulePath,
+      );
+      if (!result || !result.schema) {
+        return [];
+      }
+
+      const fieldInfo = getFieldPathFromCDefine(context.stringNode);
+      if (!fieldInfo) {
+        return [];
+      }
+
+      // The field path includes the key currently being typed as its last
+      // segment — drop it to resolve the schema of the *containing* record.
+      const containerPath = fieldInfo.fieldPath.slice(0, -1);
+      const containerSchema = resolveSchemaAtFieldPath(
+        result.schema,
+        containerPath,
+      );
+      if (!containerSchema || containerSchema.type !== "record") {
+        return [];
+      }
+      const mediaType =
+        "mediaType" in containerSchema &&
+        (containerSchema.mediaType === "images" ||
+          containerSchema.mediaType === "files")
+          ? (containerSchema.mediaType as "images" | "files")
+          : undefined;
+      const directory =
+        "directory" in containerSchema &&
+        typeof containerSchema.directory === "string"
+          ? containerSchema.directory
+          : undefined;
+      if (!mediaType || !directory) {
+        return [];
+      }
+
+      let files = await this.cache.listFilesInDirectory(valRoot, directory);
+      if (mediaType === "images") {
+        files = files.filter((file) =>
+          IMAGE_EXTENSIONS.some((ext) => file.toLowerCase().endsWith(ext)),
+        );
+      }
+
+      // Exclude keys already registered in the gallery.
+      if (
+        result.source &&
+        typeof result.source === "object" &&
+        !Array.isArray(result.source)
+      ) {
+        const registered = new Set(Object.keys(result.source));
+        files = files.filter((file) => !registered.has(file));
+      }
+
+      const stringStart = context.stringNode.getStart(sourceFile);
+      const stringEnd = context.stringNode.getEnd();
+      const startPos = sourceFile.getLineAndCharacterOfPosition(stringStart + 1);
+      const endPos = sourceFile.getLineAndCharacterOfPosition(stringEnd - 1);
+      const replaceRange = Range.create(
+        Position.create(startPos.line, startPos.character),
+        Position.create(endPos.line, endPos.character),
+      );
+
+      return files.map((file) => {
+        const item: CompletionItem = {
+          label: file,
+          kind: CompletionItemKind.File,
+          detail:
+            mediaType === "images"
+              ? `Image in gallery directory ${directory}`
+              : `File in gallery directory ${directory}`,
+        };
+        item.textEdit = TextEdit.replace(replaceRange, file);
+        return item;
+      });
+    } catch (error) {
+      console.error("Error providing media gallery key completion:", error);
+      return [];
+    }
+  }
+}
+
+/**
  * Registry of all completion providers
  */
 export class CompletionProviderRegistry {
@@ -801,6 +738,7 @@ export class CompletionProviderRegistry {
     this.register(new KeyOfCompletionProvider());
     this.register(new ImagePathCompletionProvider(cache));
     this.register(new FilePathCompletionProvider(cache));
+    this.register(new MediaGalleryKeyCompletionProvider(cache));
   }
 
   /**

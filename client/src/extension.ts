@@ -17,6 +17,9 @@ import { loginCommand } from "./commands/loginCommand";
 import { getAddMetadataFix } from "./getAddMetadataFix";
 import { downloadRemoteFileCommand } from "./commands/downloadRemoteFile";
 import { addModuleToValModulesCommand } from "./commands/addModuleToValModules";
+import { addToMediaGalleryCommand } from "./commands/addToMediaGallery";
+import { moveFileToGalleryDirectoryCommand } from "./commands/moveFileToGalleryDirectory";
+import { removeGalleryEntryCommand } from "./commands/removeGalleryEntry";
 
 let client: LanguageClient;
 let statusBarItem: vscode.StatusBarItem;
@@ -59,6 +62,18 @@ export function activate(context: ExtensionContext) {
     vscode.commands.registerCommand(
       "val.addModuleToValModules",
       addModuleToValModulesCommand,
+    ),
+    vscode.commands.registerCommand(
+      "val.addToMediaGallery",
+      addToMediaGalleryCommand,
+    ),
+    vscode.commands.registerCommand(
+      "val.moveFileToGalleryDirectory",
+      moveFileToGalleryDirectoryCommand,
+    ),
+    vscode.commands.registerCommand(
+      "val.removeGalleryEntry",
+      removeGalleryEntryCommand,
     ),
   );
   updateStatusBar(statusBarItem, currentProjectDir);
@@ -231,6 +246,64 @@ export class ValActionProvider implements vscode.CodeActionProvider {
           title: "Add module to val.modules",
           command: "val.addModuleToValModules",
           arguments: [(diag as any).data],
+        };
+        actions.push(fix);
+      } else if (
+        diag.code === "image:add-to-gallery" ||
+        diag.code === "file:add-to-gallery"
+      ) {
+        const fix = new vscode.CodeAction(
+          "Add to media gallery",
+          vscode.CodeActionKind.QuickFix,
+        );
+        fix.command = {
+          title: "Add to media gallery",
+          command: "val.addToMediaGallery",
+          arguments: [
+            {
+              uri: document.uri,
+              data: (diag as any).data,
+            },
+          ],
+        };
+        actions.push(fix);
+      } else if (
+        diag.code === "image:move-to-gallery-directory" ||
+        diag.code === "file:move-to-gallery-directory"
+      ) {
+        const fix = new vscode.CodeAction(
+          "Move file into gallery directory",
+          vscode.CodeActionKind.QuickFix,
+        );
+        fix.command = {
+          title: "Move file into gallery directory",
+          command: "val.moveFileToGalleryDirectory",
+          arguments: [
+            {
+              uri: document.uri,
+              range: diag.range,
+              data: (diag as any).data,
+            },
+          ],
+        };
+        actions.push(fix);
+      } else if (
+        diag.code === "image:remove-gallery-entry" ||
+        diag.code === "file:remove-gallery-entry"
+      ) {
+        const fix = new vscode.CodeAction(
+          "Remove entry from gallery",
+          vscode.CodeActionKind.QuickFix,
+        );
+        fix.command = {
+          title: "Remove entry from gallery",
+          command: "val.removeGalleryEntry",
+          arguments: [
+            {
+              uri: document.uri,
+              data: (diag as any).data,
+            },
+          ],
         };
         actions.push(fix);
       }

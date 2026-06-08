@@ -51,6 +51,7 @@ import { detectCompletionContext, isValFile } from "./completionContext";
 import { CompletionProviderRegistry } from "./completionProviders";
 import { ValService } from "./ValService";
 import { PublicValFilesCache } from "./publicValFilesCache";
+import { findMediaGalleryIssues } from "./mediaGalleryValidation";
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -919,6 +920,8 @@ async function validateTextDocumentInternal(
 
     checkInvalidPaths(sourceFile);
 
+    const modulePathMap = createModulePathMap(sourceFile);
+
     if (errors && errors.fatal) {
       for (const error of errors.fatal || []) {
         if (error.stack) {
@@ -946,15 +949,6 @@ async function validateTextDocumentInternal(
       }
     }
     if (errors && errors.validation) {
-      const modulePathMap = createModulePathMap(
-        ts.createSourceFile(
-          uriToFsPath(textDocument.uri),
-          text,
-          ts.ScriptTarget.ES2015,
-          true,
-        ),
-      );
-
       for (const [sourcePath, value] of Object.entries(errors.validation)) {
         if (value) {
           for (const error of value) {
@@ -1315,6 +1309,32 @@ async function validateTextDocumentInternal(
             }
           }
         }
+      }
+    }
+
+    if (source && schema) {
+      try {
+        const galleryDiagnostics = await findMediaGalleryIssues(
+          source,
+          schema,
+          modulePathMap,
+          service,
+          valRoot
+            ? { valRoot, moduleFilePath: fsPath.replace(valRoot, "") }
+            : undefined,
+        );
+        for (const issue of galleryDiagnostics) {
+          diagnostics.push({
+            severity: DiagnosticSeverity.Warning,
+            range: issue.range,
+            code: issue.code,
+            message: issue.message,
+            source: "val",
+            data: issue.data,
+          });
+        }
+      } catch (err) {
+        console.error("[mediaGalleryValidation] walker failed:", err);
       }
     }
   }
