@@ -171,7 +171,10 @@ export async function findMediaGalleryIssues(
     const directory = getReferencedDirectory(referenced.schema);
     const range =
       modulePathMap &&
-      getModulePathRange(modulePath + '."_ref"', modulePathMap);
+      getModulePathRange(
+        `${modulePath}.${JSON.stringify(FILE_REF_PROP)}`,
+        modulePathMap,
+      );
     if (!range) {
       return;
     }

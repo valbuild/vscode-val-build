@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
 import { getProjectRootDir } from "../getProjectRootDir";
+import { resolveInsideRoot } from "../safePath";
 
 export type MoveArgs = {
   uri: vscode.Uri;
@@ -29,7 +30,13 @@ export const moveFileToGalleryDirectoryCommand = async (args: MoveArgs) => {
     return;
   }
 
-  const srcAbs = path.join(valRoot, ...data.path.split("/"));
+  const srcAbs = resolveInsideRoot(valRoot, data.path);
+  if (!srcAbs) {
+    vscode.window.showErrorMessage(
+      `Cannot move ${data.path}: path escapes the Val project root.`,
+    );
+    return;
+  }
   if (!fs.existsSync(srcAbs)) {
     vscode.window.showErrorMessage(
       `Cannot move ${data.path}: file does not exist at ${srcAbs}.`,
@@ -39,7 +46,13 @@ export const moveFileToGalleryDirectoryCommand = async (args: MoveArgs) => {
 
   const baseName = path.basename(data.path);
   const newRelPath = `${data.targetDirectory}/${baseName}`;
-  const dstAbs = path.join(valRoot, ...newRelPath.split("/"));
+  const dstAbs = resolveInsideRoot(valRoot, newRelPath);
+  if (!dstAbs) {
+    vscode.window.showErrorMessage(
+      `Cannot move ${data.path}: target ${newRelPath} escapes the Val project root.`,
+    );
+    return;
+  }
   if (fs.existsSync(dstAbs)) {
     vscode.window.showErrorMessage(
       `Cannot move ${data.path}: ${newRelPath} already exists. Resolve the conflict manually.`,

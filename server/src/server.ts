@@ -920,6 +920,8 @@ async function validateTextDocumentInternal(
 
     checkInvalidPaths(sourceFile);
 
+    const modulePathMap = createModulePathMap(sourceFile);
+
     if (errors && errors.fatal) {
       for (const error of errors.fatal || []) {
         if (error.stack) {
@@ -947,15 +949,6 @@ async function validateTextDocumentInternal(
       }
     }
     if (errors && errors.validation) {
-      const modulePathMap = createModulePathMap(
-        ts.createSourceFile(
-          uriToFsPath(textDocument.uri),
-          text,
-          ts.ScriptTarget.ES2015,
-          true,
-        ),
-      );
-
       for (const [sourcePath, value] of Object.entries(errors.validation)) {
         if (value) {
           for (const error of value) {
@@ -1320,14 +1313,6 @@ async function validateTextDocumentInternal(
     }
 
     if (source && schema) {
-      const modulePathMap = createModulePathMap(
-        ts.createSourceFile(
-          uriToFsPath(textDocument.uri),
-          text,
-          ts.ScriptTarget.ES2015,
-          true,
-        ),
-      );
       try {
         const galleryDiagnostics = await findMediaGalleryIssues(
           source,

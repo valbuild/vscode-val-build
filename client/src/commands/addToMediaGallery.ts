@@ -4,6 +4,7 @@ import * as fs from "fs";
 import * as ts from "typescript";
 import { getImageMetadata, getFileMetadata } from "../metadataUtils";
 import { getProjectRootDir } from "../getProjectRootDir";
+import { resolveInsideRoot } from "../safePath";
 
 export type GalleryInsertion = {
   insertPosition: number;
@@ -150,10 +151,24 @@ export const addToMediaGalleryCommand = async (args: {
     return;
   }
 
-  const referencedAbsPath = path.join(
+  const dataPathAbs = resolveInsideRoot(valRoot, data.path);
+  if (!dataPathAbs) {
+    vscode.window.showErrorMessage(
+      `Media path escapes the Val project root: ${data.path}`,
+    );
+    return;
+  }
+
+  const referencedAbsPath = resolveInsideRoot(
     valRoot,
-    ...data.referencedModuleFilePath.split("/"),
+    data.referencedModuleFilePath,
   );
+  if (!referencedAbsPath) {
+    vscode.window.showErrorMessage(
+      `Referenced gallery module path escapes the Val project root: ${data.referencedModuleFilePath}`,
+    );
+    return;
+  }
   if (!fs.existsSync(referencedAbsPath)) {
     vscode.window.showErrorMessage(
       `Referenced gallery module not found on disk: ${referencedAbsPath}`,
@@ -173,7 +188,7 @@ export const addToMediaGalleryCommand = async (args: {
   const metadata = stripAlt(rawMetadata as Record<string, string | number>);
   if (Object.keys(metadata).length === 0) {
     vscode.window.showErrorMessage(
-      `Could not read metadata for ${data.path}. Make sure the file exists at ${path.join(valRoot, ...data.path.split("/"))}.`,
+      `Could not read metadata for ${data.path}. Make sure the file exists at ${dataPathAbs}.`,
     );
     return;
   }

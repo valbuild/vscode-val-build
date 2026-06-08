@@ -5,7 +5,7 @@
   "author": "Val Build",
   "license": "MIT",
   "engines": {
-    "node": "*"
+    "node": ">=20.19.0"
   },
   "repository": {
     "type": "git",
