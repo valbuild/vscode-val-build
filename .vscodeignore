@@ -1,11 +1,40 @@
+# What ships in the VSIX.
+#
+# The bundled language server in server/ is NOT bundled by esbuild: `tsc -b`
+# emits plain CJS that requires @valbuild/core, typescript, glob, image-size and
+# vscode-languageserver/node by name at runtime. So the server's runtime
+# dependencies MUST ship, or the published extension contains a language server
+# that cannot start — which silently kills every diagnostic and completion,
+# because a server that exits during startup just closes its stream.
+#
+# Both node_modules trees are therefore pruned by allowlist rather than shipped
+# wholesale: client/out/extension.js is bundled and needs almost nothing, and the
+# server needs its production closure and none of jest or babel.
+#
+# Verify by launching the packaged server, never by reading this file:
+#   node scripts/verify-vsix.mjs
+
 .vscode/**
 **/*.ts
 **/*.map
+**/*.tsbuildinfo
 .gitignore
 **/tsconfig.json
 **/tsconfig.base.json
+eslint.config.mjs
 contributing.md
 .travis.yml
+
+# Build and test scaffolding.
+scripts/**
+**/jest.config.js
+**/babel.config.js
+**/.babelrc.js
+**/package-lock.json
+server/__fixtures__/**
+fixtures/**
+
+# --- client: bundled, so only the language client's own runtime is needed ---
 client/node_modules/**
 !client/node_modules/vscode-jsonrpc/**
 !client/node_modules/vscode-languageclient/**
@@ -13,4 +42,20 @@ client/node_modules/**
 !client/node_modules/vscode-languageserver-types/**
 !client/node_modules/{minimatch,brace-expansion,concat-map,balanced-match}/**
 !client/node_modules/{semver,lru-cache,yallist}/**
-scripts/e2e.sh
+
+# --- server: not bundled, so its full production closure must ship ---
+# This list is `npm ls --omit=dev --parseable --all` in server/. Regenerate it
+# when the server's dependencies change, and re-run scripts/verify-vsix.mjs.
+server/node_modules/**
+!server/node_modules/@valbuild/core/**
+!server/node_modules/glob/**
+!server/node_modules/image-size/**
+!server/node_modules/minipass/**
+!server/node_modules/path-scurry/**
+!server/node_modules/ts-toolbelt/**
+!server/node_modules/typescript/**
+!server/node_modules/vscode-jsonrpc/**
+!server/node_modules/vscode-languageserver/**
+!server/node_modules/vscode-languageserver-protocol/**
+!server/node_modules/vscode-languageserver-textdocument/**
+!server/node_modules/vscode-languageserver-types/**

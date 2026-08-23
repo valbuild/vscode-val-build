@@ -1,9 +1,11 @@
 import * as path from "path";
-import { workspace, ExtensionContext } from "vscode";
+import type { ExtensionContext } from "vscode";
+import { workspace } from "vscode";
+import type {
+  LanguageClientOptions,
+  ServerOptions} from "vscode-languageclient/node";
 import {
   LanguageClient,
-  LanguageClientOptions,
-  ServerOptions,
   TransportKind,
 } from "vscode-languageclient/node";
 import * as vscode from "vscode";
@@ -20,12 +22,30 @@ import { addModuleToValModulesCommand } from "./commands/addModuleToValModules";
 import { addToMediaGalleryCommand } from "./commands/addToMediaGallery";
 import { moveFileToGalleryDirectoryCommand } from "./commands/moveFileToGalleryDirectory";
 import { removeGalleryEntryCommand } from "./commands/removeGalleryEntry";
+import { findValRoots } from "./findValRoots";
+import { formatLanguageServerInfo } from "./languageServerInfo";
+import { ProjectLanguageServers } from "./projectLanguageServers";
+import { VAL_SUPPRESS_FEATURES_NOTIFICATION } from "./valSuppressFeatures";
 
 let client: LanguageClient;
 let statusBarItem: vscode.StatusBarItem;
 let currentProjectDir: string;
+/**
+ * The language servers that ship with the Val in the user's own project.
+ *
+ * Only created when `valBuild.useProjectLanguageServer` is on; the bundled
+ * `server/` handles everything by default.
+ */
+let projectServers: ProjectLanguageServers | undefined;
+let output: vscode.OutputChannel;
+/** Where the language clients and their servers log. See ProjectLanguageServers. */
+let serverOutput: vscode.LogOutputChannel;
 
 export function activate(context: ExtensionContext) {
+  output = vscode.window.createOutputChannel("Val Build");
+  serverOutput = vscode.window.createOutputChannel("Val Language Server", {
+    log: true,
+  });
   const currentEditor = vscode.window.activeTextEditor;
   if (currentEditor) {
     currentProjectDir = getProjectRootDir(currentEditor.document.uri);
@@ -36,6 +56,8 @@ export function activate(context: ExtensionContext) {
   );
   statusBarItem.command = "val.login";
   context.subscriptions.push(
+    output,
+    serverOutput,
     statusBarItem,
     vscode.languages.registerCodeActionsProvider(
       [
@@ -75,6 +97,20 @@ export function activate(context: ExtensionContext) {
       "val.removeGalleryEntry",
       removeGalleryEntryCommand,
     ),
+    vscode.commands.registerCommand("val.showLanguageServerInfo", () => {
+      const report = formatLanguageServerInfo({
+        enabled: useProjectLanguageServer(),
+        sessions: projectServers?.sessions() ?? [],
+        workspaceRoots: findValRoots(workspaceFolderPaths()),
+      });
+      output.clear();
+      output.appendLine(report);
+      output.show(true);
+      // Returned as well as shown: an output channel's contents cannot be read
+      // back through the extension API, so this is what makes the report
+      // assertable from an integration test.
+      return report;
+    }),
   );
   updateStatusBar(statusBarItem, currentProjectDir);
 
@@ -116,9 +152,16 @@ export function activate(context: ExtensionContext) {
       { scheme: "file", language: "javascript" },
     ],
     synchronize: {
-      fileEvents: workspace.createFileSystemWatcher(
-        "**/*.val.{t,j}s,**/val.config.{t,j}s,**/val.modules.{t,j}s",
-      ),
+      // Three patterns, not one comma-joined string: a comma has no meaning
+      // between top-level braces, so the single string was read as one literal
+      // path ending in `val.modules.ts` and matched no `.val.ts` file at all —
+      // which left `onDidChangeWatchedFiles`, the retry hook for a Val root that
+      // failed to initialise, never firing.
+      fileEvents: [
+        workspace.createFileSystemWatcher("**/*.val.{ts,js}"),
+        workspace.createFileSystemWatcher("**/val.config.{ts,js}"),
+        workspace.createFileSystemWatcher("**/val.modules.{ts,js}"),
+      ],
     },
   };
 
@@ -132,9 +175,94 @@ export function activate(context: ExtensionContext) {
 
   // Start the client. This will also launch the server
   client.start();
+
+  // The project's own Val language server, if the user has opted in. Started
+  // after the bundled client so that a project server which fails to resolve
+  // cannot delay the diagnostics the bundled one already provides.
+  void startProjectServers(context);
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (
+        event.affectsConfiguration("valBuild.useProjectLanguageServer") ||
+        event.affectsConfiguration("valBuild.languageServerPath")
+      ) {
+        void restartProjectServers(context);
+      }
+    }),
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      // A folder added to the workspace may be a Val root of its own, and it may
+      // pin a different Val than every other root.
+      void projectServers?.start();
+    }),
+  );
+}
+
+/** `valBuild.useProjectLanguageServer`. Off by default. */
+function useProjectLanguageServer(): boolean {
+  return (
+    vscode.workspace
+      .getConfiguration("valBuild")
+      .get<boolean>("useProjectLanguageServer") ?? false
+  );
+}
+
+function workspaceFolderPaths(): string[] {
+  return (vscode.workspace.workspaceFolders ?? [])
+    .filter((folder) => folder.uri.scheme === "file")
+    .map((folder) => folder.uri.fsPath);
+}
+
+async function startProjectServers(context: ExtensionContext): Promise<void> {
+  if (!useProjectLanguageServer() || projectServers) {
+    return;
+  }
+  projectServers = new ProjectLanguageServers(
+    output,
+    serverOutput,
+    suppressInBundledServer,
+  );
+  context.subscriptions.push(projectServers);
+  await projectServers.start();
+}
+
+async function restartProjectServers(context: ExtensionContext): Promise<void> {
+  const existing = projectServers;
+  projectServers = undefined;
+  existing?.dispose();
+  await startProjectServers(context);
+}
+
+/**
+ * Tell the bundled server to stop serving what the project's server now serves.
+ *
+ * Sent as a notification rather than passed in `initializationOptions`, because
+ * the feature list only exists once the project server's handshake has completed
+ * — which is necessarily after the bundled server's own `initialize`.
+ */
+function suppressInBundledServer(valRoot: string, features: string[]): void {
+  if (!client) {
+    return;
+  }
+  void client
+    .sendNotification(VAL_SUPPRESS_FEATURES_NOTIFICATION, {
+      valRoot,
+      features,
+    })
+    .catch((error: unknown) => {
+      // The bundled server not yet being ready is not worth surfacing: it reads
+      // the same list again on the next change.
+      output.appendLine(
+        `Could not tell the bundled server about ${valRoot}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    });
 }
 
 export function deactivate(): Thenable<void> | undefined {
+  projectServers?.dispose();
+  projectServers = undefined;
   if (!client) {
     return undefined;
   }

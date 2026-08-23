@@ -16,7 +16,7 @@
   ],
   "displayName": "Val Build IntelliSense",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.91.0"
   },
   "activationEvents": [
     "onLanguage:typescript",
@@ -29,19 +29,81 @@
       {
         "command": "val.login",
         "title": "Log In To Val"
+      },
+      {
+        "command": "val.showLanguageServerInfo",
+        "title": "Val: Show Language Server Info"
+      },
+      {
+        "command": "val.uploadRemoteFile",
+        "title": "Val: Upload File To Val Remote"
+      },
+      {
+        "command": "val.downloadRemoteFile",
+        "title": "Val: Download Remote File"
+      },
+      {
+        "command": "val.addModuleToValModules",
+        "title": "Val: Add Module To val.modules"
+      },
+      {
+        "command": "val.addToMediaGallery",
+        "title": "Val: Add To Media Gallery"
+      },
+      {
+        "command": "val.moveFileToGalleryDirectory",
+        "title": "Val: Move File Into Gallery Directory"
+      },
+      {
+        "command": "val.removeGalleryEntry",
+        "title": "Val: Remove Entry From Gallery"
       }
     ],
     "configuration": {
       "type": "object",
       "title": "Val Build IntelliSense",
       "properties": {
-        "valBuild.maxNumberOfProblems": {
-          "scope": "resource",
-          "type": "number",
-          "default": 100,
-          "description": "Controls the maximum number of problems produced by the Val build."
+        "valBuild.useProjectLanguageServer": {
+          "scope": "window",
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Use the language server that ships with the Val installed in your project (`@valbuild/language-server`) instead of the one bundled with this extension.\n\nOne published extension then works against many versions of Val. Features the project's server serves are switched off in the bundled one, so nothing is reported twice.\n\nYou do not install `@valbuild/language-server` yourself \u2014 it ships inside `@valbuild/next`, `@valbuild/tanstackstart-react` or `@valbuild/cli`, whichever your project depends on. There is no minimum version of `@valbuild/core`.\n\nOff by default while the two servers reach parity. Run **Val: Show Language Server Info** to see what resolved."
+        },
+        "valBuild.languageServerPath": {
+          "scope": "window",
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Absolute path to a `@valbuild/language-server` entry point, used instead of resolving one from the project's `node_modules`.\n\nNeeded under Yarn PnP, where there is no `node_modules` to resolve through, and useful for developing against an unreleased Val by pointing at a monorepo checkout's `packages/language-server/bin.js`. The `VAL_LANGUAGE_SERVER_PATH` environment variable does the same and is used when this is empty.\n\nOnly has an effect when `#valBuild.useProjectLanguageServer#` is on."
         }
       }
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "val.uploadRemoteFile",
+          "when": "false"
+        },
+        {
+          "command": "val.downloadRemoteFile",
+          "when": "false"
+        },
+        {
+          "command": "val.addModuleToValModules",
+          "when": "false"
+        },
+        {
+          "command": "val.addToMediaGallery",
+          "when": "false"
+        },
+        {
+          "command": "val.moveFileToGalleryDirectory",
+          "when": "false"
+        },
+        {
+          "command": "val.removeGalleryEntry",
+          "when": "false"
+        }
+      ]
     }
   },
   "scripts": {
@@ -51,19 +113,20 @@
     "esbuild-watch": "npm run esbuild-base -- --sourcemap --watch",
     "compile": "tsc -b",
     "watch": "tsc -b -w",
-    "lint": "eslint ./client/src ./server/src --ext .ts,.tsx",
+    "lint": "eslint client/src server/src",
     "postinstall": "cd client && npm install && cd ../server && npm install && cd ..",
-    "test": "sh ./scripts/e2e.sh"
+    "test": "sh ./scripts/e2e.sh",
+    "install-fixtures": "cd fixtures && (cd npm && npm ci --no-audit --no-fund) && (cd old-val && npm ci --no-audit --no-fund) && (cd pnpm && pnpm install --ignore-workspace --frozen-lockfile) && (cd yarn && yarn install --immutable)"
   },
   "devDependencies": {
-    "@types/mocha": "^9.1.0",
-    "@types/node": "^16.18.34",
-    "@typescript-eslint/eslint-plugin": "^6.7.0",
-    "@typescript-eslint/parser": "^6.7.0",
-    "@vscode/vsce": "^3.3.1",
-    "esbuild": "^0.19.8",
-    "eslint": "^8.35.0",
-    "mocha": "^9.2.1",
-    "typescript": "^5.3.2"
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^24.13.3",
+    "@typescript-eslint/eslint-plugin": "^8.67.0",
+    "@typescript-eslint/parser": "^8.67.0",
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.8.1",
+    "mocha": "^11.8.0",
+    "typescript": "^5.9.3"
   }
 }

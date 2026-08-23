@@ -35,7 +35,6 @@ export async function evalValConfigFile(
 
   const userRequire = createRequire(valConfigPath);
   const exportsObj = {};
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sandbox: Record<string, any> = {
     exports: exportsObj,
     module: { exports: exportsObj },

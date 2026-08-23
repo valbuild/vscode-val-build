@@ -1,39 +1,33 @@
+import * as fs from "fs";
 import * as path from "path";
-import * as Mocha from "mocha";
-import * as glob from "glob";
+import Mocha from "mocha";
 
-export function run(): Promise<void> {
-  // Create the mocha test
-  const mocha = new Mocha({
-    ui: "tdd",
-    color: true,
-  });
+/**
+ * Entry point for the integration suite, run inside a real VS Code instance by
+ * `runTest.ts`.
+ *
+ * `import Mocha` rather than `import * as Mocha` (a namespace object is not
+ * constructible), and `readdirSync` rather than `glob`: this file was written
+ * against glob's callback API, removed in v10, and `glob` was never a dependency
+ * of `client/` at all — it resolved from the repo root, so which API it got
+ * depended on what npm happened to hoist. Both are part of why this suite had
+ * been commented out rather than fixed.
+ */
+export async function run(): Promise<void> {
+  const mocha = new Mocha({ ui: "tdd", color: true });
+  // Activating the extension starts a language server, and with
+  // `useProjectLanguageServer` on it resolves and starts another.
   mocha.timeout(100000);
 
   const testsRoot = __dirname;
+  for (const file of fs.readdirSync(testsRoot).sort()) {
+    if (file.endsWith(".test.js")) {
+      mocha.addFile(path.resolve(testsRoot, file));
+    }
+  }
 
-  return new Promise((resolve, reject) => {
-    glob("**.test.js", { cwd: testsRoot }, (err, files) => {
-      if (err) {
-        return reject(err);
-      }
-
-      // Add files to the test suite
-      files.forEach((f) => mocha.addFile(path.resolve(testsRoot, f)));
-
-      try {
-        // Run the mocha test
-        mocha.run((failures) => {
-          if (failures > 0) {
-            reject(new Error(`${failures} tests failed.`));
-          } else {
-            resolve();
-          }
-        });
-      } catch (err) {
-        console.error(err);
-        reject(err);
-      }
-    });
-  });
+  const failures = await new Promise<number>((resolve) => mocha.run(resolve));
+  if (failures > 0) {
+    throw new Error(`${failures} test(s) failed.`);
+  }
 }

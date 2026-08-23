@@ -31,7 +31,6 @@ export const downloadRemoteFileCommand = async (args) => {
       const corePath = require.resolve("@valbuild/core", {
         paths: [projectDirOfDocumentUri],
       });
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const valbuildCore = require(corePath);
       Internal = valbuildCore.Internal;
     } catch (err) {

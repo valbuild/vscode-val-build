@@ -1,42 +1,82 @@
-import * as vscode from "vscode";
+import * as fs from "fs";
 import * as path from "path";
+import * as vscode from "vscode";
 
-export let doc: vscode.TextDocument;
-export let editor: vscode.TextEditor;
-export let documentEol: string;
-export let platformEol: string;
+/** `publisher.name` from the root package.json. */
+export const EXTENSION_ID = "valbuild.vscode-val-build";
 
 /**
- * Activates the valbuild.vscode-val-build extension
+ * Activate the extension, and optionally open a fixture file.
+ *
+ * Returns the opened document so a test can assert against it, rather than
+ * publishing it through module-level mutable state as this helper used to —
+ * which made every test depend on the order the others ran in.
  */
-export async function activate(docUri: vscode.Uri) {
-  // The extensionId is `publisher.name` from package.json
-  const ext = vscode.extensions.getExtension("valbuild.vscode-val-build")!;
-  await ext.activate();
-  try {
-    doc = await vscode.workspace.openTextDocument(docUri);
-    editor = await vscode.window.showTextDocument(doc);
-    await sleep(2000); // Wait for server activation
-  } catch (e) {
-    console.error(e);
+export async function activate(): Promise<void>;
+export async function activate(
+  fixturePath: string,
+): Promise<vscode.TextDocument>;
+export async function activate(
+  fixturePath?: string,
+): Promise<vscode.TextDocument | void> {
+  const extension = vscode.extensions.getExtension(EXTENSION_ID);
+  if (!extension) {
+    throw new Error(`${EXTENSION_ID} is not installed`);
   }
-}
+  await extension.activate();
 
-async function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-export const getDocPath = (p: string) => {
-  return path.resolve(__dirname, "../../testFixture", p);
-};
-export const getDocUri = (p: string) => {
-  return vscode.Uri.file(getDocPath(p));
-};
-
-export async function setTestContent(content: string): Promise<boolean> {
-  const all = new vscode.Range(
-    doc.positionAt(0),
-    doc.positionAt(doc.getText().length),
+  if (fixturePath === undefined) {
+    return;
+  }
+  const document = await vscode.workspace.openTextDocument(
+    getDocUri(fixturePath),
   );
-  return editor.edit((eb) => eb.replace(all, content));
+  await vscode.window.showTextDocument(document);
+  // The bundled server debounces validation and evaluates modules on a worker
+  // tick, so diagnostics are not published by the time `showTextDocument`
+  // resolves.
+  await sleep(3000);
+  return document;
+}
+
+export const getDocPath = (p: string): string =>
+  path.resolve(__dirname, "../../../fixtures/no-val", p);
+
+export const getDocUri = (p: string): vscode.Uri =>
+  vscode.Uri.file(getDocPath(p));
+
+/** The Val root with nothing installed: `fixtures/no-val`. */
+export const noValRoot = (): string =>
+  path.resolve(__dirname, "../../../fixtures/no-val");
+
+/** The root on a Val older than the language server: `fixtures/old-val`. */
+export const oldValRoot = (): string =>
+  path.resolve(__dirname, "../../../fixtures/old-val");
+
+/** The real-Val root in the workspace: `fixtures/npm`. */
+export const realValRoot = (): string =>
+  path.resolve(__dirname, "../../../fixtures/npm");
+
+/**
+ * Whether the real-Val fixture has been installed.
+ *
+ * Its `node_modules` is not committed (`npm run install-fixtures` creates it),
+ * so tests that need a running project server skip rather than fail on a fresh
+ * checkout.
+ */
+export function hasRealValFixture(): boolean {
+  return fs.existsSync(
+    path.join(realValRoot(), "node_modules", "@valbuild", "language-server"),
+  );
+}
+
+/** Whether the older-Val fixture has been installed. */
+export function hasOldValFixture(): boolean {
+  return fs.existsSync(
+    path.join(oldValRoot(), "node_modules", "@valbuild", "next"),
+  );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

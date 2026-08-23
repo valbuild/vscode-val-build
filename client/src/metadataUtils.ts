@@ -1,7 +1,7 @@
 import * as path from "path";
 import * as vscode from "vscode";
 import { readFileSync } from "fs";
-import sizeOf from "image-size";
+import { imageSize } from "image-size";
 import * as ts from "typescript";
 import { filenameToMimeType } from "./mimeType/convertMimeType";
 
@@ -19,7 +19,7 @@ export function getImageMetadata(imageFilename: string, document: vscode.Uri) {
   const resolvedFile = getAbsoluteFilePath(imageFilename, document);
   if (resolvedFile.status === "ok") {
     if (resolvedFile.buffer) {
-      const res = sizeOf(resolvedFile.buffer);
+      const res = imageSize(resolvedFile.buffer);
       if (res.type) {
         let mimeType = `image/${res.type}`;
         if (res.type === "svg") {

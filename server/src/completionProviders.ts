@@ -19,6 +19,7 @@ import {
   SerializedRegExpPattern,
 } from "./routeValidation";
 import { PublicValFilesCache } from "./publicValFilesCache";
+import { SuppressedFeatures } from "./suppressedFeatures";
 import {
   getFieldPathFromCDefine,
   resolveRichtextHrefSchema,
@@ -73,6 +74,17 @@ export interface CompletionProvider {
   contextType: CompletionContext["type"];
 
   /**
+   * Feature flags from `@valbuild/language-server`'s protocol that this provider
+   * duplicates. When the project's own Val server advertises *all* of them, this
+   * provider stands down so the user does not get every completion twice.
+   *
+   * All of them, not any: a provider covering two flags that only defers on one
+   * would silently lose the other. Empty means "nothing upstream serves this
+   * yet", so it always runs.
+   */
+  features: readonly string[];
+
+  /**
    * Provide completion items for the given context
    */
   provideCompletionItems(
@@ -89,6 +101,9 @@ export interface CompletionProvider {
  */
 export class RouteCompletionProvider implements CompletionProvider {
   contextType: CompletionContext["type"] = "unknown-string";
+  // Answers both `s.route()` fields and richtext hrefs, so it only stands down
+  // when the project's server serves both.
+  features = ["completions/route", "completions/richtextLink"] as const;
 
   async provideCompletionItems(
     context: CompletionContext,
@@ -201,6 +216,7 @@ export class RouteCompletionProvider implements CompletionProvider {
  */
 export class KeyOfCompletionProvider implements CompletionProvider {
   contextType: CompletionContext["type"] = "unknown-string"; // Handle content object strings
+  features = ["completions/keyOf"] as const;
 
   async provideCompletionItems(
     context: CompletionContext,
@@ -308,6 +324,7 @@ export class KeyOfCompletionProvider implements CompletionProvider {
  */
 export class ImagePathCompletionProvider implements CompletionProvider {
   contextType: CompletionContext["type"] = "c.image";
+  features = ["completions/mediaPath"] as const;
   private cache: PublicValFilesCache;
 
   constructor(cache: PublicValFilesCache) {
@@ -433,6 +450,7 @@ export class ImagePathCompletionProvider implements CompletionProvider {
  */
 export class FilePathCompletionProvider implements CompletionProvider {
   contextType: CompletionContext["type"] = "c.file";
+  features = ["completions/mediaPath"] as const;
   private cache: PublicValFilesCache;
 
   constructor(cache: PublicValFilesCache) {
@@ -624,6 +642,7 @@ async function resolveReferencedGallery(
  */
 export class MediaGalleryKeyCompletionProvider implements CompletionProvider {
   contextType: CompletionContext["type"] = "content-property-key";
+  features = ["completions/galleryKey"] as const;
   private cache: PublicValFilesCache;
 
   constructor(cache: PublicValFilesCache) {
@@ -730,7 +749,14 @@ export class MediaGalleryKeyCompletionProvider implements CompletionProvider {
 export class CompletionProviderRegistry {
   private providers: Map<CompletionContext["type"], CompletionProvider[]>;
 
-  constructor(cache: PublicValFilesCache) {
+  constructor(
+    cache: PublicValFilesCache,
+    /**
+     * What the project's own Val language server has taken over, per Val root.
+     * Absent when nothing can take anything over, which is the default.
+     */
+    private readonly suppressed?: SuppressedFeatures,
+  ) {
     this.providers = new Map();
 
     // Register default providers
@@ -760,12 +786,18 @@ export class CompletionProviderRegistry {
     valRoot: string,
     sourceFile?: ts.SourceFile,
   ): Promise<CompletionItem[]> {
-    const providers = this.providers.get(context.type);
+    const registered = this.providers.get(context.type);
+    const providers = registered?.filter(
+      (provider) => !this.suppressed?.isSuppressed(valRoot, provider.features),
+    );
     console.log(
       "[CompletionProviderRegistry] Found",
       providers?.length || 0,
       "providers for context type:",
       context.type,
+      registered && providers && registered.length !== providers.length
+        ? `(${registered.length - providers.length} handled by the project's Val server)`
+        : "",
     );
 
     if (!providers || providers.length === 0) {

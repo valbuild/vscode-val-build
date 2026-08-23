@@ -3,17 +3,6 @@ import path from "node:path";
 import vm from "node:vm";
 import { createRequire } from "node:module";
 
-export function loadTsConfig(tsconfigPath: string, host: ts.ParseConfigHost) {
-  const configFile = ts.readConfigFile(tsconfigPath, host.readFile);
-  if (configFile.error) throw configFile.error;
-
-  return ts.parseJsonConfigFileContent(
-    configFile.config,
-    host,
-    path.dirname(tsconfigPath),
-  );
-}
-
 export function createTsVmRuntime(opts: {
   compilerOptions: ts.CompilerOptions;
   host: ts.ParseConfigHost;

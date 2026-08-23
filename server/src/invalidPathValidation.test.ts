@@ -2,6 +2,22 @@ import assert from "assert";
 import ts from "typescript";
 import { Diagnostic, DiagnosticSeverity } from "vscode-languageserver/node";
 
+/**
+ * A diagnostic's message as text.
+ *
+ * LSP 3.18 (vscode-languageserver 10) widened `Diagnostic.message` to
+ * `string | MarkupContent`. This server only ever writes plain strings, so this
+ * is a narrowing for the assertions rather than a case that can really occur.
+ */
+function messageOf(diagnostic: {
+  message: string | { value: string };
+}): string {
+  return typeof diagnostic.message === "string"
+    ? diagnostic.message
+    : diagnostic.message.value;
+}
+
+
 describe("Invalid Path Validation", () => {
   function validatePaths(code: string): Diagnostic[] {
     const diagnostics: Diagnostic[] = [];
@@ -115,15 +131,15 @@ export default c.define("/test.val.ts", s.image(), c.image("/public/foo.png"));
     );
     assert.strictEqual(diagnostics[0].code, "invalid-path-location");
     assert.ok(
-      diagnostics[0].message.includes('"/public/foo.png"'),
+      messageOf(diagnostics[0]).includes('"/public/foo.png"'),
       "Message should mention the path",
     );
     assert.ok(
-      diagnostics[0].message.includes("not under /public/val/"),
+      messageOf(diagnostics[0]).includes("not under /public/val/"),
       "Message should say it's not under /public/val/",
     );
     assert.ok(
-      diagnostics[0].message.includes("/public/val/foo.png"),
+      messageOf(diagnostics[0]).includes("/public/val/foo.png"),
       "Message should suggest the correct path",
     );
   });
@@ -143,11 +159,11 @@ export default c.define("/test.val.ts", s.file(), c.file("/public/documents/repo
     );
     assert.strictEqual(diagnostics[0].code, "invalid-path-location");
     assert.ok(
-      diagnostics[0].message.includes("/public/documents/report.pdf"),
+      messageOf(diagnostics[0]).includes("/public/documents/report.pdf"),
       "Message should mention the path",
     );
     assert.ok(
-      diagnostics[0].message.includes("/public/val/report.pdf"),
+      messageOf(diagnostics[0]).includes("/public/val/report.pdf"),
       "Message should suggest moving to /public/val/",
     );
   });
@@ -167,11 +183,11 @@ export default c.define("/test.val.ts", s.image(), c.image("/public/val/"));
     );
     assert.strictEqual(diagnostics[0].code, "invalid-path-directory");
     assert.ok(
-      diagnostics[0].message.includes('"/public/val/"'),
+      messageOf(diagnostics[0]).includes('"/public/val/"'),
       "Message should mention the path",
     );
     assert.ok(
-      diagnostics[0].message.includes("directory path"),
+      messageOf(diagnostics[0]).includes("directory path"),
       "Message should say it's a directory path",
     );
   });
@@ -212,11 +228,11 @@ export default c.define("/test.val.ts", s.object({
       "Should have two diagnostics for both directory paths",
     );
     assert.ok(
-      diagnostics[0].message.includes("/public/val/images/"),
+      messageOf(diagnostics[0]).includes("/public/val/images/"),
       "First error should mention /public/val/images/",
     );
     assert.ok(
-      diagnostics[1].message.includes("/public/val/nested/deep/"),
+      messageOf(diagnostics[1]).includes("/public/val/nested/deep/"),
       "Second error should mention /public/val/nested/deep/",
     );
   });

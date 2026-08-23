@@ -37,7 +37,6 @@ export const uploadRemoteFileCommand =
         const corePath = require.resolve("@valbuild/core", {
           paths: [projectDirOfDocumentUri],
         });
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
         const valbuildCore = require(corePath) as unknown;
         if (
           typeof valbuildCore === "object" &&

@@ -1,0 +1,5 @@
+# The lockfiles are committed so the layouts are reproducible; the trees they
+# describe are not. `npm run install-fixtures` recreates them.
+node_modules/
+.pnpm-store/
+.yarn/

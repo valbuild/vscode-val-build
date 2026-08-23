@@ -3,6 +3,29 @@ import path from "path";
 import fs from "fs";
 import { PublicValFilesCache } from "./publicValFilesCache";
 
+/**
+ * Wait until the cache reflects a change, rather than for a fixed interval.
+ *
+ * `fs.watch` delivers its event whenever the OS gets round to it, and the cache
+ * then re-scans asynchronously. A flat sleep is a bet on how loaded the machine
+ * is: long enough on an idle laptop, not long enough when the rest of the suite
+ * is running in parallel — which is how this failed intermittently and only ever
+ * in a full run.
+ */
+async function waitFor(
+  condition: () => boolean,
+  timeoutMs = 5000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() > deadline) {
+      return; // Let the assertion that follows report the real failure.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+
 describe("PublicValFilesCache", () => {
   const fixtureRoot = path.join(__dirname, "../__fixtures__/public-val-files");
 
@@ -168,8 +191,10 @@ describe("PublicValFilesCache", () => {
       // Create a new file
       fs.writeFileSync(testFile, "");
 
-      // Wait for file watcher to detect the change
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Wait for the file watcher to detect the change.
+      await waitFor(() =>
+        cache.getFiles(fixtureRoot).includes("/public/val/test-new-file.png"),
+      );
 
       const filesAfter = cache.getFiles(fixtureRoot);
       assert.ok(
@@ -203,8 +228,13 @@ describe("PublicValFilesCache", () => {
       // Delete the file
       fs.unlinkSync(testFile);
 
-      // Wait for file watcher to detect the change
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Wait for the file watcher to detect the change.
+      await waitFor(
+        () =>
+          !cache
+            .getFiles(fixtureRoot)
+            .includes("/public/val/test-delete-file.png"),
+      );
 
       const filesAfter = cache.getFiles(fixtureRoot);
       assert.ok(

@@ -1,5 +1,5 @@
 import { readFileSync } from "fs";
-import sizeOf from "image-size";
+import { imageSize } from "image-size";
 import { filenameToMimeType } from "./mimeType/convertMimeType";
 
 export interface ImageMetadata {
@@ -32,7 +32,7 @@ export function getImageMetadata(
 ): ImageMetadata | null {
   try {
     const buffer = readFileSync(absoluteFilePath);
-    const dimensions = sizeOf(new Uint8Array(buffer));
+    const dimensions = imageSize(new Uint8Array(buffer));
 
     if (dimensions.type) {
       let mimeType = `image/${dimensions.type}`;

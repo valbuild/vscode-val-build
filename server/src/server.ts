@@ -52,6 +52,13 @@ import { CompletionProviderRegistry } from "./completionProviders";
 import { ValService } from "./ValService";
 import { PublicValFilesCache } from "./publicValFilesCache";
 import { findMediaGalleryIssues } from "./mediaGalleryValidation";
+import { getFileMetadata, getImageMetadata } from "./metadataUtils";
+import {
+  SuppressedFeatures,
+  VAL_SUPPRESS_FEATURES_NOTIFICATION,
+  SuppressFeaturesParams,
+} from "./suppressedFeatures";
+import { featuresForDiagnosticCode } from "./diagnosticFeatures";
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -84,9 +91,14 @@ let moduleIndexMappingsByValRoot: {
 } = {};
 // Initialize public val files cache
 const publicValFilesCache = new PublicValFilesCache();
+// What the language server shipping with the user's Val has taken over, per Val
+// root. Empty unless `valBuild.useProjectLanguageServer` is on and a project
+// server actually started.
+const suppressedFeatures = new SuppressedFeatures();
 // Initialize completion provider registry
 const completionProviderRegistry = new CompletionProviderRegistry(
   publicValFilesCache,
+  suppressedFeatures,
 );
 
 connection.onInitialize(async (params: InitializeParams) => {
@@ -322,52 +334,11 @@ connection.onInitialized(() => {
   }
 });
 
-// The example settings
-interface ExampleSettings {
-  maxNumberOfProblems: number;
-}
-
-// The global settings, used when the `workspace/configuration` request is not supported by the client.
-// Please note that this is not the case when using this server with the client provided in this example
-// but could happen with other clients.
-const defaultSettings: ExampleSettings = { maxNumberOfProblems: 1000 };
-let globalSettings: ExampleSettings = defaultSettings;
-
-// Cache the settings of all open documents
-const documentSettings: Map<string, Thenable<ExampleSettings>> = new Map();
-
-connection.onDidChangeConfiguration((change) => {
-  if (hasConfigurationCapability) {
-    // Reset all cached document settings
-    documentSettings.clear();
-  } else {
-    globalSettings = <ExampleSettings>(
-      (change.settings.valBuild || defaultSettings)
-    );
-  }
-
-  // Revalidate all open text documents
+connection.onDidChangeConfiguration(() => {
+  // No per-document settings to invalidate: this server reads no configuration.
+  // Revalidating anyway is what makes a change to
+  // `valBuild.useProjectLanguageServer` take effect without a reload.
   documents.all().forEach(validateTextDocument);
-});
-
-function getDocumentSettings(resource: string): Thenable<ExampleSettings> {
-  if (!hasConfigurationCapability) {
-    return Promise.resolve(globalSettings);
-  }
-  let result = documentSettings.get(resource);
-  if (!result) {
-    result = connection.workspace.getConfiguration({
-      scopeUri: resource,
-      section: "valBuild",
-    });
-    documentSettings.set(resource, result);
-  }
-  return result;
-}
-
-// Only keep settings for open documents
-documents.onDidClose((e) => {
-  documentSettings.delete(e.document.uri);
 });
 
 // The content of a text document has changed. This event is emitted
@@ -996,7 +967,7 @@ async function validateTextDocumentInternal(
                     diagnostics = [diagnostic];
                     connection.sendDiagnostics({
                       uri: textDocument.uri,
-                      diagnostics,
+                      diagnostics: withoutSuppressed(valRoot, diagnostics),
                     });
                     return;
                   }
@@ -1200,7 +1171,6 @@ async function validateTextDocumentInternal(
                       const corePath = require.resolve("@valbuild/core", {
                         paths: [valRoot],
                       });
-                      // eslint-disable-next-line @typescript-eslint/no-var-requires
                       const userCore = require(corePath) as unknown;
                       if (
                         typeof userCore === "object" &&
@@ -1387,8 +1357,71 @@ async function validateTextDocumentInternal(
   }
 
   // Send the computed diagnostics to VSCode.
-  connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
+  connection.sendDiagnostics({
+    uri: textDocument.uri,
+    diagnostics: withoutSuppressed(valRoot, diagnostics),
+  });
 }
+
+/**
+ * Drop the diagnostics the project's own Val language server is already
+ * publishing for this root, so the user does not see every problem twice.
+ *
+ * A no-op unless `valBuild.useProjectLanguageServer` is on and a project server
+ * actually started and advertised features.
+ */
+function withoutSuppressed(
+  valRoot: string | undefined,
+  diagnostics: Diagnostic[],
+): Diagnostic[] {
+  if (suppressedFeatures.isEmpty || !valRoot) {
+    return diagnostics;
+  }
+  const kept = diagnostics.filter(
+    (diagnostic) =>
+      !suppressedFeatures.isSuppressed(
+        valRoot,
+        featuresForDiagnosticCode(diagnostic.code),
+      ),
+  );
+  if (kept.length !== diagnostics.length) {
+    console.log(
+      `Suppressed ${diagnostics.length - kept.length} diagnostic(s) served by the project's Val server in ${valRoot}`,
+    );
+  }
+  return kept;
+}
+
+/**
+ * Arbitration with the language server that ships with the user's Val.
+ *
+ * Sent by the client after that server's `initialize` handshake — which cannot
+ * have completed before this server's own — and again with an empty list when it
+ * stops, so that a project server going away restores full service here rather
+ * than leaving the user with no diagnostics at all.
+ */
+connection.onNotification(
+  VAL_SUPPRESS_FEATURES_NOTIFICATION,
+  (params: SuppressFeaturesParams) => {
+    if (!params || typeof params.valRoot !== "string") {
+      return;
+    }
+    const features = Array.isArray(params.features) ? params.features : [];
+    suppressedFeatures.set(params.valRoot, features);
+    console.log(
+      `Project Val server for ${params.valRoot} serves: ${
+        suppressedFeatures.describe(params.valRoot).join(", ") || "nothing"
+      }`,
+    );
+    // Republish, or the previous set of diagnostics stays on screen.
+    documents.all().forEach((document) => {
+      const fsPath = decodeURIComponent(uriToFsPath(document.uri));
+      if (fsPath.startsWith(params.valRoot)) {
+        validateTextDocument(document);
+      }
+    });
+  },
+);
 
 function checkKeyOf(
   key: string,
@@ -1558,7 +1591,6 @@ connection.onCompletionResolve(
         // Get metadata based on type
         let metadata: Record<string, string | number> = {};
         if (type === "image") {
-          const { getImageMetadata } = await import("./metadataUtils");
           const imageMetadata = getImageMetadata(absoluteFilePath);
           if (imageMetadata) {
             metadata = imageMetadata as unknown as Record<
@@ -1567,7 +1599,6 @@ connection.onCompletionResolve(
             >;
           }
         } else if (type === "file") {
-          const { getFileMetadata } = await import("./metadataUtils");
           const fileMetadata = getFileMetadata(absoluteFilePath);
           if (fileMetadata) {
             metadata = fileMetadata as unknown as Record<
@@ -1846,8 +1877,11 @@ connection.onCodeAction((params) => {
         });
 
         if (insertPosition !== null && modulesArrayNode !== null) {
-          // Generate the import statement
-          const importStatement = `import("./${relativePath}")`;
+          // The registry entry, in the one shape Val itself writes and the
+          // `val.addModuleToValModules` command inserts. A bare
+          // `import("./x.val")` also happens to be accepted, but two formats for
+          // one fix meant the file's style depended on which path applied it.
+          const importStatement = `{ def: () => import("./${relativePath}") }`;
 
           // Determine if we need a comma before or after
           const arrayNode = modulesArrayNode as ts.ArrayLiteralExpression;

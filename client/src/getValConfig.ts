@@ -1,4 +1,5 @@
-import { EvaluatedValConfig, evalValConfigFile } from "./evalValConfigFile";
+import type { EvaluatedValConfig } from "./evalValConfigFile";
+import { evalValConfigFile } from "./evalValConfigFile";
 
 let configsByRootDir: Record<string, EvaluatedValConfig> = {};
 

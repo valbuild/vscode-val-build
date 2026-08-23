@@ -1,0 +1,8 @@
+minimumReleaseAgeExclude:
+  - '@valbuild/core@0.97.7'
+  - '@valbuild/language-server@0.98.0'
+  - '@valbuild/next@0.98.0'
+  - '@valbuild/react@0.97.7'
+  - '@valbuild/server@0.98.0'
+  - '@valbuild/shared@0.97.7'
+  - '@valbuild/ui@0.97.7'
