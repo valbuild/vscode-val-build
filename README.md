@@ -22,23 +22,28 @@ Apply hot fixes on validation errors right from VS Code.
 
 <img src="https://raw.githubusercontent.com/valbuild/vscode-val-build/master/.github/hotfixes.gif" alt="" />
 
-## Using the language server that ships with your Val
+## How it works
 
-By default this extension uses its own bundled language server. That server is
-pinned to one version of Val, so a project on a newer Val can get subtly wrong
-results from it.
+Every Val feature — validation errors, quick fixes, media path and route
+completions, remote upload and download, logging in — is served by
+**`@valbuild/language-server`**, which ships inside the Val your own project
+depends on. This extension resolves that server and runs it, one per Val root.
 
-`@valbuild/language-server` fixes that by shipping *with* Val. The extension
-resolves it out of your project's `node_modules` and launches it, so one
-published extension works against many versions of Val — and because the
-contract is LSP, other editors get support nearly for free.
+That is the whole design, and it is deliberate. The extension used to carry its
+own copy of Val: a re-implementation of module evaluation, its own schema walker,
+its own copy of Val's mime table, its own remote-upload client. One extension
+release therefore worked against one Val release, Val-specific fixes shipped on
+this repository's cadence rather than Val's, and no other editor could benefit.
 
-Set **`valBuild.useProjectLanguageServer`** to `true` to opt in. It is `false`
-while the two servers reach feature parity; with it on, every feature the
-project's server advertises is switched off in the bundled one, so nothing is
-reported twice.
+Now the contract is plain LSP:
 
-One server is started per Val root, because roots in a monorepo may pin different
+- A feature your Val gains works immediately, with no extension update.
+- A feature your Val does not have is hidden, rather than answered wrongly.
+- Other editors get the same features by launching the same binary. See
+  [`packages/language-server/README.md`](https://github.com/valbuild/val/blob/main/packages/language-server/README.md)
+  in the Val repository for a Neovim configuration.
+
+One server runs per Val root, because roots in a monorepo may pin different
 versions of Val.
 
 ### What you need installed
@@ -73,10 +78,9 @@ dependency is reachable only through the package that depends on it.
 
 ### Settings
 
-| Setting                                | Default | Description                                                                                              |
-| -------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------- |
-| `valBuild.useProjectLanguageServer`    | `false` | Use the language server from your project's Val instead of the bundled one.                               |
-| `valBuild.languageServerPath`          | `""`    | Absolute path to a language server entry point, used instead of resolving one from `node_modules`.         |
+| Setting                       | Default | Description                                                                                        |
+| ----------------------------- | ------- | -------------------------------------------------------------------------------------------------- |
+| `valBuild.languageServerPath` | `""`    | Absolute path to a language server entry point, used instead of resolving one from `node_modules`. |
 
 `VAL_LANGUAGE_SERVER_PATH` does the same as `valBuild.languageServerPath` and is
 used when the setting is empty.

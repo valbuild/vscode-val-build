@@ -1,105 +1,58 @@
-import * as path from "path";
-import type { ExtensionContext } from "vscode";
-import { workspace } from "vscode";
-import type {
-  LanguageClientOptions,
-  ServerOptions} from "vscode-languageclient/node";
-import {
-  LanguageClient,
-  TransportKind,
-} from "vscode-languageclient/node";
 import * as vscode from "vscode";
-import * as ts from "typescript";
-import { getFileMetadata, getImageMetadata } from "./metadataUtils";
-import { updateStatusBar } from "./login";
-import { getProjectRootDir } from "./getProjectRootDir";
-import { updateValConfig } from "./getValConfig";
-import { uploadRemoteFileCommand } from "./commands/uploadRemoteFile";
-import { loginCommand } from "./commands/loginCommand";
-import { getAddMetadataFix } from "./getAddMetadataFix";
-import { downloadRemoteFileCommand } from "./commands/downloadRemoteFile";
-import { addModuleToValModulesCommand } from "./commands/addModuleToValModules";
-import { addToMediaGalleryCommand } from "./commands/addToMediaGallery";
-import { moveFileToGalleryDirectoryCommand } from "./commands/moveFileToGalleryDirectory";
-import { removeGalleryEntryCommand } from "./commands/removeGalleryEntry";
+import type { ExtensionContext } from "vscode";
 import { findValRoots } from "./findValRoots";
 import { formatLanguageServerInfo } from "./languageServerInfo";
 import { ProjectLanguageServers } from "./projectLanguageServers";
-import { VAL_SUPPRESS_FEATURES_NOTIFICATION } from "./valSuppressFeatures";
 
-let client: LanguageClient;
-let statusBarItem: vscode.StatusBarItem;
-let currentProjectDir: string;
 /**
- * The language servers that ship with the Val in the user's own project.
+ * The Val extension: a launcher, and nothing else.
  *
- * Only created when `valBuild.useProjectLanguageServer` is on; the bundled
- * `server/` handles everything by default.
+ * Everything Val-specific — evaluating modules, validating them, computing
+ * quick fixes, completing media paths, uploading to Val Remote, logging in —
+ * lives in `@valbuild/language-server`, which ships inside the Val the user's
+ * own project depends on. This extension resolves that server and runs it.
+ *
+ * That is the whole design, and it is what fixes the problem this replaced. The
+ * old extension carried a second implementation of Val pinned to one version: a
+ * `node:vm` re-do of `createService`, its own schema walker, its own copy of
+ * Val's mime table, its own remote-upload client. So one extension release
+ * worked against one Val release, Val-specific fixes shipped on this
+ * repository's cadence rather than Val's, and editors other than VS Code got
+ * nothing.
+ *
+ * Now the contract is plain LSP. A feature Val gains appears here without an
+ * extension release, and a Neovim or Zed user gets the same features by pointing
+ * their client at the same binary — see `packages/language-server/README.md` in
+ * the Val repository.
+ *
+ * The one thing that stays here is what LSP cannot express: finding which
+ * directories are Val roots, resolving the right server for each, and saying
+ * something useful when there isn't one.
  */
+
 let projectServers: ProjectLanguageServers | undefined;
 let output: vscode.OutputChannel;
 /** Where the language clients and their servers log. See ProjectLanguageServers. */
 let serverOutput: vscode.LogOutputChannel;
+let statusBarItem: vscode.StatusBarItem;
 
 export function activate(context: ExtensionContext) {
   output = vscode.window.createOutputChannel("Val Build");
   serverOutput = vscode.window.createOutputChannel("Val Language Server", {
     log: true,
   });
-  const currentEditor = vscode.window.activeTextEditor;
-  if (currentEditor) {
-    currentProjectDir = getProjectRootDir(currentEditor.document.uri);
-  }
   statusBarItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
     100,
   );
-  statusBarItem.command = "val.login";
+  statusBarItem.command = SHOW_INFO_COMMAND;
+
   context.subscriptions.push(
     output,
     serverOutput,
     statusBarItem,
-    vscode.languages.registerCodeActionsProvider(
-      [
-        { scheme: "file", language: "typescript" },
-        {
-          scheme: "file",
-          language: "javascript",
-        },
-      ],
-      new ValActionProvider(),
-      {
-        providedCodeActionKinds: ValActionProvider.providedCodeActionKinds,
-      },
-    ),
-    vscode.commands.registerCommand(
-      "val.uploadRemoteFile",
-      uploadRemoteFileCommand(statusBarItem),
-    ),
-    vscode.commands.registerCommand(
-      "val.downloadRemoteFile",
-      downloadRemoteFileCommand,
-    ),
-    vscode.commands.registerCommand("val.login", loginCommand(statusBarItem)),
-    vscode.commands.registerCommand(
-      "val.addModuleToValModules",
-      addModuleToValModulesCommand,
-    ),
-    vscode.commands.registerCommand(
-      "val.addToMediaGallery",
-      addToMediaGalleryCommand,
-    ),
-    vscode.commands.registerCommand(
-      "val.moveFileToGalleryDirectory",
-      moveFileToGalleryDirectoryCommand,
-    ),
-    vscode.commands.registerCommand(
-      "val.removeGalleryEntry",
-      removeGalleryEntryCommand,
-    ),
-    vscode.commands.registerCommand("val.showLanguageServerInfo", () => {
+    vscode.commands.registerCommand(SHOW_INFO_COMMAND, () => {
       const report = formatLanguageServerInfo({
-        enabled: useProjectLanguageServer(),
         sessions: projectServers?.sessions() ?? [],
         workspaceRoots: findValRoots(workspaceFolderPaths()),
       });
@@ -111,82 +64,9 @@ export function activate(context: ExtensionContext) {
       // assertable from an integration test.
       return report;
     }),
-  );
-  updateStatusBar(statusBarItem, currentProjectDir);
-
-  vscode.window.onDidChangeActiveTextEditor(
-    (editor) => {
-      if (!editor) {
-        return;
-      }
-      const maybeNewProjectDir = getProjectRootDir(editor.document.uri);
-      if (maybeNewProjectDir && maybeNewProjectDir !== currentProjectDir) {
-        currentProjectDir = maybeNewProjectDir;
-        updateStatusBar(statusBarItem, currentProjectDir);
-        updateValConfig(currentProjectDir);
-      }
-    },
-    null,
-    context.subscriptions,
-  );
-
-  // The server is implemented in node
-  const serverModule = context.asAbsolutePath(
-    path.join("server", "out", "server.js"),
-  );
-
-  // If the extension is launched in debug mode then the debug server options are used
-  // Otherwise the run options are used
-  const serverOptions: ServerOptions = {
-    run: { module: serverModule, transport: TransportKind.ipc },
-    debug: {
-      module: serverModule,
-      transport: TransportKind.ipc,
-    },
-  };
-
-  // Options to control the language client
-  const clientOptions: LanguageClientOptions = {
-    documentSelector: [
-      { scheme: "file", language: "typescript" },
-      { scheme: "file", language: "javascript" },
-    ],
-    synchronize: {
-      // Three patterns, not one comma-joined string: a comma has no meaning
-      // between top-level braces, so the single string was read as one literal
-      // path ending in `val.modules.ts` and matched no `.val.ts` file at all —
-      // which left `onDidChangeWatchedFiles`, the retry hook for a Val root that
-      // failed to initialise, never firing.
-      fileEvents: [
-        workspace.createFileSystemWatcher("**/*.val.{ts,js}"),
-        workspace.createFileSystemWatcher("**/val.config.{ts,js}"),
-        workspace.createFileSystemWatcher("**/val.modules.{ts,js}"),
-      ],
-    },
-  };
-
-  // Create the language client and start the client.
-  client = new LanguageClient(
-    "valBuild",
-    "Val Build IntelliSense",
-    serverOptions,
-    clientOptions,
-  );
-
-  // Start the client. This will also launch the server
-  client.start();
-
-  // The project's own Val language server, if the user has opted in. Started
-  // after the bundled client so that a project server which fails to resolve
-  // cannot delay the diagnostics the bundled one already provides.
-  void startProjectServers(context);
-
-  context.subscriptions.push(
+    vscode.commands.registerCommand(LOGIN_COMMAND, () => login()),
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (
-        event.affectsConfiguration("valBuild.useProjectLanguageServer") ||
-        event.affectsConfiguration("valBuild.languageServerPath")
-      ) {
+      if (event.affectsConfiguration("valBuild.languageServerPath")) {
         void restartProjectServers(context);
       }
     }),
@@ -196,15 +76,75 @@ export function activate(context: ExtensionContext) {
       void projectServers?.start();
     }),
   );
+
+  void startProjectServers(context);
 }
 
-/** `valBuild.useProjectLanguageServer`. Off by default. */
-function useProjectLanguageServer(): boolean {
-  return (
-    vscode.workspace
-      .getConfiguration("valBuild")
-      .get<boolean>("useProjectLanguageServer") ?? false
+/** Palette entry: `Val: Show Language Server Info`. */
+const SHOW_INFO_COMMAND = "val.showLanguageServerInfo";
+/**
+ * Palette entry: `Val: Log In`.
+ *
+ * The work happens in the language server (it owns the device flow and writes
+ * the token next to the project). This forwards to whichever server serves the
+ * active file's Val root — a monorepo can have several, and they can be logged
+ * in separately.
+ */
+const LOGIN_COMMAND = "val.login";
+/** The server-side command name. Advertised in the handshake's `commands`. */
+const SERVER_LOGIN_COMMAND = "val.login";
+
+async function login(): Promise<void> {
+  const session = activeSession();
+  if (!session) {
+    void vscode.window.showWarningMessage(
+      "Val: no Val language server is running. Run “Val: Show Language Server Info” to see why.",
+    );
+    return;
+  }
+  if (!session.capabilities?.commands.includes(SERVER_LOGIN_COMMAND)) {
+    // A missing command means this Val version does not serve it. Say so rather
+    // than sending a request that will be refused.
+    void vscode.window.showWarningMessage(
+      `Val: the language server in ${session.valRoot} does not support logging in. Update Val in that project.`,
+    );
+    return;
+  }
+  try {
+    await projectServers?.executeCommand(
+      session.valRoot,
+      SERVER_LOGIN_COMMAND,
+      [],
+    );
+  } catch (error) {
+    void vscode.window.showErrorMessage(
+      `Val: login failed. ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+/**
+ * The running session for the active editor's Val root, falling back to the only
+ * running one.
+ *
+ * The fallback is what makes the palette entry work from a file that is not
+ * itself a Val module, which is most of them.
+ */
+function activeSession() {
+  const sessions = (projectServers?.sessions() ?? []).filter(
+    (session) => session.state === "running",
   );
+  const activePath = vscode.window.activeTextEditor?.document.uri.fsPath;
+  if (activePath) {
+    const match = sessions
+      .filter((session) => activePath.startsWith(session.valRoot))
+      // The innermost root wins in a nested workspace.
+      .sort((a, b) => b.valRoot.length - a.valRoot.length)[0];
+    if (match) {
+      return match;
+    }
+  }
+  return sessions.length === 1 ? sessions[0] : undefined;
 }
 
 function workspaceFolderPaths(): string[] {
@@ -214,16 +154,15 @@ function workspaceFolderPaths(): string[] {
 }
 
 async function startProjectServers(context: ExtensionContext): Promise<void> {
-  if (!useProjectLanguageServer() || projectServers) {
+  if (projectServers) {
     return;
   }
-  projectServers = new ProjectLanguageServers(
-    output,
-    serverOutput,
-    suppressInBundledServer,
+  projectServers = new ProjectLanguageServers(output, serverOutput, () =>
+    updateStatusBar(),
   );
   context.subscriptions.push(projectServers);
   await projectServers.start();
+  updateStatusBar();
 }
 
 async function restartProjectServers(context: ExtensionContext): Promise<void> {
@@ -234,208 +173,47 @@ async function restartProjectServers(context: ExtensionContext): Promise<void> {
 }
 
 /**
- * Tell the bundled server to stop serving what the project's server now serves.
+ * What the status bar says.
  *
- * Sent as a notification rather than passed in `initializationOptions`, because
- * the feature list only exists once the project server's handshake has completed
- * — which is necessarily after the bundled server's own `initialize`.
+ * The Val version being served, because that is the thing a user cannot
+ * otherwise see and the thing that decides which features exist. Deliberately
+ * not login state: reading `.val/pat.json` would be Val-specific knowledge in a
+ * launcher, and the server reports login results itself.
  */
-function suppressInBundledServer(valRoot: string, features: string[]): void {
-  if (!client) {
+function updateStatusBar(): void {
+  const sessions = projectServers?.sessions() ?? [];
+  if (sessions.length === 0) {
+    statusBarItem.hide();
     return;
   }
-  void client
-    .sendNotification(VAL_SUPPRESS_FEATURES_NOTIFICATION, {
-      valRoot,
-      features,
-    })
-    .catch((error: unknown) => {
-      // The bundled server not yet being ready is not worth surfacing: it reads
-      // the same list again on the next change.
-      output.appendLine(
-        `Could not tell the bundled server about ${valRoot}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    });
+  const running = sessions.filter((session) => session.state === "running");
+  if (running.length === 0) {
+    statusBarItem.text = "$(warning) Val";
+    statusBarItem.tooltip =
+      "No Val language server is running. Click for details.";
+    statusBarItem.show();
+    return;
+  }
+  const versions = new Set(
+    running.map(
+      (session) => session.capabilities?.versions.languageServer ?? "?",
+    ),
+  );
+  statusBarItem.text =
+    versions.size === 1
+      ? `$(check) Val ${[...versions][0]}`
+      : `$(check) Val (${running.length} roots)`;
+  statusBarItem.tooltip = running
+    .map(
+      (session) =>
+        `${session.valRoot}: Val ${session.capabilities?.versions.languageServer ?? "?"}`,
+    )
+    .join("\n");
+  statusBarItem.show();
 }
 
 export function deactivate(): Thenable<void> | undefined {
   projectServers?.dispose();
   projectServers = undefined;
-  if (!client) {
-    return undefined;
-  }
-  return client.stop();
-}
-
-export class ValActionProvider implements vscode.CodeActionProvider {
-  public static readonly providedCodeActionKinds = [
-    vscode.CodeActionKind.QuickFix,
-  ];
-
-  async provideCodeActions(
-    document: vscode.TextDocument,
-    _range: vscode.Range | vscode.Selection,
-    context: vscode.CodeActionContext,
-  ): Promise<(vscode.CodeAction | vscode.Command)[]> {
-    const actions: vscode.CodeAction[] = [];
-    for (const diag of context.diagnostics) {
-      if (
-        diag.code === "image:add-metadata" ||
-        diag.code === "file:add-metadata"
-      ) {
-        const fix = new vscode.CodeAction(
-          "Add metadata",
-          vscode.CodeActionKind.QuickFix,
-        );
-        fix.edit = new vscode.WorkspaceEdit();
-        const sourceFile = ts.createSourceFile(
-          "<synthetic-source-file>",
-          document.getText(diag.range),
-          ts.ScriptTarget.ES2015,
-          true,
-          ts.ScriptKind.TSX,
-        );
-
-        const res = getAddMetadataFix(sourceFile, (filename: string) => {
-          if (typeof diag.code === "string" && diag.code.startsWith("image")) {
-            return getImageMetadata(filename, document.uri);
-          } else {
-            return getFileMetadata(filename, document.uri);
-          }
-        });
-        if (res) {
-          const newNodeText = res.newNodeText;
-          fix.edit.replace(document.uri, diag.range, newNodeText);
-          actions.push(fix);
-        }
-      } else if (
-        typeof diag.code === "string" &&
-        (diag.code.startsWith("image:upload-remote") ||
-          diag.code.startsWith("file:upload-remote"))
-      ) {
-        // extract validation hash from diag.code. Example: image:upload-remote:91c0
-        const validationBasisHash = diag.code.split(":")[2];
-        if (!validationBasisHash) {
-          console.error(
-            "No validation basis hash found in diag.code",
-            diag.code,
-          );
-          return actions;
-        }
-        const fix = new vscode.CodeAction(
-          "Upload to Val",
-          vscode.CodeActionKind.QuickFix,
-        );
-        fix.command = {
-          title: "Upload to Val",
-          command: "val.uploadRemoteFile",
-          arguments: [
-            {
-              uri: document.uri,
-              range: diag.range,
-              text: document.getText(diag.range),
-              code: diag.code,
-              validationBasisHash,
-            },
-          ],
-        };
-        actions.push(fix);
-      } else if (
-        typeof diag.code === "string" &&
-        (diag.code.startsWith("image:download-remote") ||
-          diag.code.startsWith("file:download-remote"))
-      ) {
-        const fix = new vscode.CodeAction(
-          "Download and create local file",
-          vscode.CodeActionKind.QuickFix,
-        );
-        fix.edit = new vscode.WorkspaceEdit();
-        fix.command = {
-          title: "Download and create local file",
-          command: "val.downloadRemoteFile",
-          arguments: [
-            {
-              uri: document.uri,
-              range: diag.range,
-              text: document.getText(diag.range),
-              code: diag.code,
-            },
-          ],
-        };
-        actions.push(fix);
-      } else if (diag.code === "val:missing-module") {
-        const fix = new vscode.CodeAction(
-          "Add module to val.modules",
-          vscode.CodeActionKind.QuickFix,
-        );
-        fix.command = {
-          title: "Add module to val.modules",
-          command: "val.addModuleToValModules",
-          arguments: [(diag as any).data],
-        };
-        actions.push(fix);
-      } else if (
-        diag.code === "image:add-to-gallery" ||
-        diag.code === "file:add-to-gallery"
-      ) {
-        const fix = new vscode.CodeAction(
-          "Add to media gallery",
-          vscode.CodeActionKind.QuickFix,
-        );
-        fix.command = {
-          title: "Add to media gallery",
-          command: "val.addToMediaGallery",
-          arguments: [
-            {
-              uri: document.uri,
-              data: (diag as any).data,
-            },
-          ],
-        };
-        actions.push(fix);
-      } else if (
-        diag.code === "image:move-to-gallery-directory" ||
-        diag.code === "file:move-to-gallery-directory"
-      ) {
-        const fix = new vscode.CodeAction(
-          "Move file into gallery directory",
-          vscode.CodeActionKind.QuickFix,
-        );
-        fix.command = {
-          title: "Move file into gallery directory",
-          command: "val.moveFileToGalleryDirectory",
-          arguments: [
-            {
-              uri: document.uri,
-              range: diag.range,
-              data: (diag as any).data,
-            },
-          ],
-        };
-        actions.push(fix);
-      } else if (
-        diag.code === "image:remove-gallery-entry" ||
-        diag.code === "file:remove-gallery-entry"
-      ) {
-        const fix = new vscode.CodeAction(
-          "Remove entry from gallery",
-          vscode.CodeActionKind.QuickFix,
-        );
-        fix.command = {
-          title: "Remove entry from gallery",
-          command: "val.removeGalleryEntry",
-          arguments: [
-            {
-              uri: document.uri,
-              data: (diag as any).data,
-            },
-          ],
-        };
-        actions.push(fix);
-      }
-    }
-    return actions;
-  }
+  return undefined;
 }

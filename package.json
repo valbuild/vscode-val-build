@@ -28,82 +28,24 @@
     "commands": [
       {
         "command": "val.login",
-        "title": "Log In To Val"
+        "title": "Val: Log In"
       },
       {
         "command": "val.showLanguageServerInfo",
         "title": "Val: Show Language Server Info"
-      },
-      {
-        "command": "val.uploadRemoteFile",
-        "title": "Val: Upload File To Val Remote"
-      },
-      {
-        "command": "val.downloadRemoteFile",
-        "title": "Val: Download Remote File"
-      },
-      {
-        "command": "val.addModuleToValModules",
-        "title": "Val: Add Module To val.modules"
-      },
-      {
-        "command": "val.addToMediaGallery",
-        "title": "Val: Add To Media Gallery"
-      },
-      {
-        "command": "val.moveFileToGalleryDirectory",
-        "title": "Val: Move File Into Gallery Directory"
-      },
-      {
-        "command": "val.removeGalleryEntry",
-        "title": "Val: Remove Entry From Gallery"
       }
     ],
     "configuration": {
       "type": "object",
       "title": "Val Build IntelliSense",
       "properties": {
-        "valBuild.useProjectLanguageServer": {
-          "scope": "window",
-          "type": "boolean",
-          "default": false,
-          "markdownDescription": "Use the language server that ships with the Val installed in your project (`@valbuild/language-server`) instead of the one bundled with this extension.\n\nOne published extension then works against many versions of Val. Features the project's server serves are switched off in the bundled one, so nothing is reported twice.\n\nYou do not install `@valbuild/language-server` yourself \u2014 it ships inside `@valbuild/next`, `@valbuild/tanstackstart-react` or `@valbuild/cli`, whichever your project depends on. There is no minimum version of `@valbuild/core`.\n\nOff by default while the two servers reach parity. Run **Val: Show Language Server Info** to see what resolved."
-        },
         "valBuild.languageServerPath": {
           "scope": "window",
           "type": "string",
           "default": "",
-          "markdownDescription": "Absolute path to a `@valbuild/language-server` entry point, used instead of resolving one from the project's `node_modules`.\n\nNeeded under Yarn PnP, where there is no `node_modules` to resolve through, and useful for developing against an unreleased Val by pointing at a monorepo checkout's `packages/language-server/bin.js`. The `VAL_LANGUAGE_SERVER_PATH` environment variable does the same and is used when this is empty.\n\nOnly has an effect when `#valBuild.useProjectLanguageServer#` is on."
+          "markdownDescription": "Absolute path to a `@valbuild/language-server` entry point, used instead of resolving one from the project's `node_modules`.\n\nNeeded under Yarn PnP, where there is no `node_modules` to resolve through, and useful for developing against an unreleased Val by pointing at a monorepo checkout's `packages/language-server/bin.js`. The `VAL_LANGUAGE_SERVER_PATH` environment variable does the same and is used when this is empty."
         }
       }
-    },
-    "menus": {
-      "commandPalette": [
-        {
-          "command": "val.uploadRemoteFile",
-          "when": "false"
-        },
-        {
-          "command": "val.downloadRemoteFile",
-          "when": "false"
-        },
-        {
-          "command": "val.addModuleToValModules",
-          "when": "false"
-        },
-        {
-          "command": "val.addToMediaGallery",
-          "when": "false"
-        },
-        {
-          "command": "val.moveFileToGalleryDirectory",
-          "when": "false"
-        },
-        {
-          "command": "val.removeGalleryEntry",
-          "when": "false"
-        }
-      ]
     }
   },
   "scripts": {
@@ -113,8 +55,8 @@
     "esbuild-watch": "npm run esbuild-base -- --sourcemap --watch",
     "compile": "tsc -b",
     "watch": "tsc -b -w",
-    "lint": "eslint client/src server/src",
-    "postinstall": "cd client && npm install && cd ../server && npm install && cd ..",
+    "lint": "eslint client/src",
+    "postinstall": "cd client && npm install",
     "test": "sh ./scripts/e2e.sh",
     "install-fixtures": "cd fixtures && (cd npm && npm ci --no-audit --no-fund) && (cd old-val && npm ci --no-audit --no-fund) && (cd pnpm && pnpm install --ignore-workspace --frozen-lockfile) && (cd yarn && yarn install --immutable)"
   },

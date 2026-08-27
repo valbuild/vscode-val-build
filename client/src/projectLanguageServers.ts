@@ -104,14 +104,14 @@ export class ProjectLanguageServers implements vscode.Disposable {
      */
     private readonly serverOutput: vscode.LogOutputChannel,
     /**
-     * Called whenever a root's served features change, so the bundled server can
-     * stop publishing what the project's server now handles. Both publishing
-     * diagnostics for the same file would show the user duplicates.
+     * Called whenever a root's session changes state, so the UI can follow.
+     *
+     * This used to carry the served feature list, which the bundled server
+     * needed in order to stop publishing what this one had taken over. There is
+     * no second server any more, so there is nothing to arbitrate — only a
+     * status bar to refresh.
      */
-    private readonly onFeaturesChanged: (
-      valRoot: string,
-      features: string[],
-    ) => void,
+    private readonly onSessionsChanged: () => void,
   ) {}
 
   sessions(): ProjectServerSession[] {
@@ -176,6 +176,7 @@ export class ProjectLanguageServers implements vscode.Disposable {
         state: "failed",
         detail: diagnosis.message,
       });
+      this.onSessionsChanged();
       this.report(valRoot, diagnosis.message, diagnosis.actions);
       return;
     }
@@ -208,6 +209,7 @@ export class ProjectLanguageServers implements vscode.Disposable {
       session.detail = message;
       this.clients.delete(valRoot);
       this.log(`${valRoot}: failed to start: ${message}`);
+      this.onSessionsChanged();
       this.report(
         valRoot,
         `The Val language server in ${path.basename(valRoot)} failed to start: ${message}`,
@@ -244,6 +246,7 @@ export class ProjectLanguageServers implements vscode.Disposable {
       session.state = "incompatible";
       session.detail = message;
       this.log(`${valRoot}: ${incompatible.status}: ${message}`);
+      this.onSessionsChanged();
       await this.stopOne(valRoot);
       this.report(valRoot, message, actions);
       return;
@@ -258,7 +261,29 @@ export class ProjectLanguageServers implements vscode.Disposable {
         `protocol v${capabilities.protocolVersion}, via ${diagnosis.resolved.via})`,
     );
     this.log(`${valRoot}: features: ${capabilities.features.join(", ") || "none"}`);
-    this.onFeaturesChanged(valRoot, capabilities.features);
+    this.onSessionsChanged();
+  }
+
+  /**
+   * Run one of the server's own commands, for a palette entry.
+   *
+   * A code action's `command` is forwarded by `LanguageClient` on its own, so
+   * this exists only for the commands a user invokes directly rather than
+   * through a diagnostic.
+   */
+  async executeCommand(
+    valRoot: string,
+    command: string,
+    args: unknown[],
+  ): Promise<unknown> {
+    const client = this.clients.get(valRoot);
+    if (!client) {
+      throw new Error(`No Val language server is running for ${valRoot}.`);
+    }
+    return client.sendRequest("workspace/executeCommand", {
+      command,
+      arguments: args,
+    });
   }
 
   private async stopOne(valRoot: string): Promise<void> {
@@ -269,7 +294,7 @@ export class ProjectLanguageServers implements vscode.Disposable {
     this.clients.delete(valRoot);
     // Set before stopping, so the error handler knows the closure is expected.
     this.stopping.add(valRoot);
-    this.onFeaturesChanged(valRoot, []);
+    this.onSessionsChanged();
     try {
       await client.stop();
     } catch {

@@ -1,28 +1,19 @@
 {
+  // A solution file: it builds `client/`, which is the whole extension now that
+  // the bundled language server is gone. `compilerOptions` here apply to no
+  // files of its own -- there is no top-level `src` -- and are kept only so that
+  // `tsc -b` has a valid project to read.
   "compilerOptions": {
     "module": "commonjs",
     "target": "es2020",
-    "lib": [
-      "es2020"
-    ],
-    "outDir": "out",
-    "rootDir": "src",
-    "sourceMap": true,
+    "lib": ["es2020"],
+    "noEmit": true,
     "skipLibCheck": true
   },
-  "include": [
-    "src"
-  ],
-  "exclude": [
-    "node_modules",
-    ".vscode-test"
-  ],
+  "files": [],
   "references": [
     {
       "path": "./client"
-    },
-    {
-      "path": "./server"
     }
   ]
 }

@@ -15,8 +15,8 @@ import Mocha from "mocha";
  */
 export async function run(): Promise<void> {
   const mocha = new Mocha({ ui: "tdd", color: true });
-  // Activating the extension starts a language server, and with
-  // `useProjectLanguageServer` on it resolves and starts another.
+  // Activating the extension resolves and launches one language server per Val
+  // root in the workspace, and the fixtures are real installs.
   mocha.timeout(100000);
 
   const testsRoot = __dirname;

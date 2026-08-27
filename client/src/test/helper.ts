@@ -32,9 +32,9 @@ export async function activate(
     getDocUri(fixturePath),
   );
   await vscode.window.showTextDocument(document);
-  // The bundled server debounces validation and evaluates modules on a worker
-  // tick, so diagnostics are not published by the time `showTextDocument`
-  // resolves.
+  // The language server debounces validation and evaluates the whole project on
+  // first request, so diagnostics are not published by the time
+  // `showTextDocument` resolves.
   await sleep(3000);
   return document;
 }

@@ -16,7 +16,7 @@ import type { ProtocolNegotiationResult } from "./valProtocol";
  * Turning "the language server did not start" into something the user can act
  * on.
  *
- * The behaviour is a hard fail with an actionable message: no bundled fallback
+ * The behaviour is a hard fail with an actionable message: there is no fallback
  * pretending to be the project's Val, and no silent version mismatch. But "not
  * resolvable" covers several different situations whose fixes have nothing in
  * common — a Val upgrade, a dependency reinstall, an extension update — so this

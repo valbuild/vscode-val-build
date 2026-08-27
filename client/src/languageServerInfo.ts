@@ -11,12 +11,9 @@ import type { ProjectServerSession } from "./projectLanguageServers";
  * A pure string builder so the whole report can be asserted in tests.
  */
 export function formatLanguageServerInfo({
-  enabled,
   sessions,
   workspaceRoots,
 }: {
-  /** `valBuild.useProjectLanguageServer`. */
-  enabled: boolean;
   sessions: ProjectServerSession[];
   /** Val roots found in the workspace, whether or not a server started. */
   workspaceRoots: string[];
@@ -25,20 +22,25 @@ export function formatLanguageServerInfo({
   lines.push("Val language server");
   lines.push("===================");
   lines.push("");
-  lines.push(`valBuild.useProjectLanguageServer: ${enabled}`);
-  if (!enabled) {
-    lines.push(
-      "  The bundled language server is handling everything. Set this to true to",
-      "  use the server that ships with the Val in your project.",
-    );
-  }
+  lines.push(
+    "Every Val feature is served by @valbuild/language-server, which ships",
+    "inside the Val your project depends on. This extension only resolves and",
+    "runs it, one server per Val root.",
+  );
+  lines.push("");
   lines.push(
     `Val roots in workspace: ${workspaceRoots.length ? workspaceRoots.join(", ") : "none"}`,
   );
   lines.push("");
 
   if (sessions.length === 0) {
-    lines.push("No project language servers.");
+    lines.push(
+      "No language servers running.",
+      workspaceRoots.length === 0
+        ? "  No Val root was found in this workspace."
+        : "  A Val root was found but no server started for it. A root with no" +
+          " @valbuild/* installed is skipped silently by design.",
+    );
     return lines.join("\n");
   }
 

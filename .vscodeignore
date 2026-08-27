@@ -1,61 +1,53 @@
-# What ships in the VSIX.
+# What NOT to ship in the VSIX.
 #
-# The bundled language server in server/ is NOT bundled by esbuild: `tsc -b`
-# emits plain CJS that requires @valbuild/core, typescript, glob, image-size and
-# vscode-languageserver/node by name at runtime. So the server's runtime
-# dependencies MUST ship, or the published extension contains a language server
-# that cannot start — which silently kills every diagnostic and completion,
-# because a server that exits during startup just closes its stream.
+# This used to be an allowlist: a long list of `!server/node_modules/...`
+# re-includes, because the bundled language server was plain `tsc` output that
+# `require`d its dependencies by name at runtime, so its whole production closure
+# had to be packaged. Two shipped bugs came from that list going stale.
 #
-# Both node_modules trees are therefore pruned by allowlist rather than shipped
-# wholesale: client/out/extension.js is bundled and needs almost nothing, and the
-# server needs its production closure and none of jest or babel.
-#
-# Verify by launching the packaged server, never by reading this file:
-#   node scripts/verify-vsix.mjs
+# There is no bundled server any more. The extension is one esbuild bundle
+# (`client/out/extension.js`) plus the manifest and the icon, and the language
+# server comes from the user's own project. So this is a plain exclude list, and
+# nothing here needs updating when a dependency changes.
 
-.vscode/**
+# Sources and build inputs: the bundle is the artifact.
 **/*.ts
 **/*.map
-**/*.tsbuildinfo
-.gitignore
 **/tsconfig.json
-**/tsconfig.base.json
-eslint.config.mjs
-contributing.md
-.travis.yml
-
-# Build and test scaffolding.
+**/tsconfig.tsbuildinfo
+client/src/**
 scripts/**
+
+# `tsc -b` and esbuild both write into client/out: tsc emits one .js per source
+# file (typechecking and the test build need it), esbuild writes the single
+# bundle the manifest points at. Only the bundle belongs in the VSIX. Without
+# this the archive also carried a .js for every module -- compiled *tests*
+# included -- and, because tsc does not clean, stale ones for source files that
+# had since been deleted.
+client/out/**
+!client/out/extension.js
+
+# Test and tooling config.
 **/jest.config.js
 **/babel.config.js
 **/.babelrc.js
+eslint.config.mjs
 **/package-lock.json
-server/__fixtures__/**
+
+# Resolution fixtures: real npm/pnpm/yarn installs, for CI only.
 fixtures/**
 
-# --- client: bundled, so only the language client's own runtime is needed ---
+# node_modules is not needed at all: everything the extension runs is bundled.
+node_modules/**
 client/node_modules/**
-!client/node_modules/vscode-jsonrpc/**
-!client/node_modules/vscode-languageclient/**
-!client/node_modules/vscode-languageserver-protocol/**
-!client/node_modules/vscode-languageserver-types/**
-!client/node_modules/{minimatch,brace-expansion,concat-map,balanced-match}/**
-!client/node_modules/{semver,lru-cache,yallist}/**
 
-# --- server: not bundled, so its full production closure must ship ---
-# This list is `npm ls --omit=dev --parseable --all` in server/. Regenerate it
-# when the server's dependencies change, and re-run scripts/verify-vsix.mjs.
-server/node_modules/**
-!server/node_modules/@valbuild/core/**
-!server/node_modules/glob/**
-!server/node_modules/image-size/**
-!server/node_modules/minipass/**
-!server/node_modules/path-scurry/**
-!server/node_modules/ts-toolbelt/**
-!server/node_modules/typescript/**
-!server/node_modules/vscode-jsonrpc/**
-!server/node_modules/vscode-languageserver/**
-!server/node_modules/vscode-languageserver-protocol/**
-!server/node_modules/vscode-languageserver-textdocument/**
-!server/node_modules/vscode-languageserver-types/**
+# Belt and braces. `server/` is deleted, but a stale local copy -- untracked
+# build output and its node_modules from before the deletion -- is still on the
+# disk of anyone who had the old checkout, and `vsce package` packages the
+# working tree rather than the index. Without this line such a checkout produces
+# a VSIX that ships a second implementation of Val. Verified: it did.
+server/**
+
+.github/**
+.vscode/**
+.gitignore

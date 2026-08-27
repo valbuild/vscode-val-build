@@ -26,7 +26,6 @@ const running: ProjectServerSession = {
 describe("formatLanguageServerInfo", () => {
   test("reports path, version, anchor and negotiated protocol", () => {
     const report = formatLanguageServerInfo({
-      enabled: true,
       sessions: [running],
       workspaceRoots: ["/repo/apps/web"],
     });
@@ -43,7 +42,6 @@ describe("formatLanguageServerInfo", () => {
     // The failure this prevents: debugging against a stale local checkout for an
     // hour because a setting from last week is still pointing at it.
     const report = formatLanguageServerInfo({
-      enabled: true,
       workspaceRoots: ["/repo"],
       sessions: [
         {
@@ -67,20 +65,29 @@ describe("formatLanguageServerInfo", () => {
     expect(report).toContain("0.99.0-dev");
   });
 
-  test("explains the default rather than looking broken", () => {
+  test("explains an idle root rather than looking broken", () => {
+    // A Val root with no server is the "not a Val project, or dependencies are
+    // not installed" case, which is silent by design. The report is the only
+    // place that says so, so it has to say which of the two happened.
     const report = formatLanguageServerInfo({
-      enabled: false,
       sessions: [],
       workspaceRoots: ["/repo"],
     });
-    expect(report).toContain("valBuild.useProjectLanguageServer: false");
-    expect(report).toContain("bundled language server is handling everything");
-    expect(report).toContain("No project language servers.");
+    expect(report).toContain("No language servers running.");
+    expect(report).toContain("skipped silently by design");
+  });
+
+  test("says so when the workspace has no Val root at all", () => {
+    const report = formatLanguageServerInfo({
+      sessions: [],
+      workspaceRoots: [],
+    });
+    expect(report).toContain("Val roots in workspace: none");
+    expect(report).toContain("No Val root was found in this workspace.");
   });
 
   test("reports why a root failed instead of omitting it", () => {
     const report = formatLanguageServerInfo({
-      enabled: true,
       workspaceRoots: ["/repo"],
       sessions: [
         {
@@ -109,7 +116,6 @@ describe("formatLanguageServerInfo", () => {
 
   test("lists every root in a multi-root workspace", () => {
     const report = formatLanguageServerInfo({
-      enabled: true,
       workspaceRoots: ["/repo/a", "/repo/b"],
       sessions: [
         running,
