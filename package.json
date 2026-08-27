@@ -58,7 +58,8 @@
     "lint": "eslint client/src",
     "postinstall": "cd client && npm install",
     "test": "sh ./scripts/e2e.sh",
-    "install-fixtures": "cd fixtures && (cd npm && npm ci --no-audit --no-fund) && (cd old-val && npm ci --no-audit --no-fund) && (cd pnpm && pnpm install --ignore-workspace --frozen-lockfile) && (cd yarn && yarn install --immutable)"
+    "install-fixtures": "cd fixtures && (cd npm && npm ci --no-audit --no-fund) && (cd old-val && npm ci --no-audit --no-fund) && (cd pnpm && pnpm install --ignore-workspace --frozen-lockfile) && (cd yarn && yarn install --immutable)",
+    "release": "node scripts/release.mjs"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
