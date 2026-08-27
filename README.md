@@ -106,3 +106,27 @@ Three situations have different fixes, and the extension tells them apart:
 Pointing `valBuild.languageServerPath` at a Val monorepo checkout's
 `packages/language-server/bin.js` is also how to develop against an unreleased
 Val.
+
+## Releasing
+
+```bash
+npm run release -- patch     # 1.0.23 -> 1.0.24
+npm run release -- minor     # 1.0.23 -> 1.1.0
+npm run release -- 2.0.0     # an explicit version
+npm run release -- minor --dry-run
+```
+
+Publishing is driven by a tag: `.github/workflows/publish.yml` fires on `v*` and
+ships to both the Visual Studio Marketplace and the Open VSX Registry. The script
+is the rest of it — bump, commit, tag, push — with the checks that are only cheap
+to make *before* the tag exists.
+
+It refuses to release from a dirty tree (`vsce` packages the working tree, not the
+commit), from a branch that has diverged from its remote, or onto a tag that
+already exists. It then rebuilds, relints, runs the client tests and
+`verify-vsix.mjs`, and asserts that `package.json` and both version fields in
+`package-lock.json` match the tag — the same assertion `publish.yml` makes, made
+where it is still easy to act on.
+
+The push is the point of no return, so it asks first. `--dry-run` prints the plan
+and changes nothing; `--skip-checks` skips the rebuild when it has just run.
