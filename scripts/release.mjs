@@ -126,9 +126,21 @@ function parseArgs(argv) {
     else fail(`Unexpected argument \`${arg}\`.`);
   }
   if (!options.request) {
+    // Deliberately no default. A release script that picks a bump when you
+    // forget to name one eventually ships the wrong size of release, and the
+    // wrong size is only obvious to everyone else. So the message shows the
+    // three bumps against the *current* version rather than in the abstract.
+    const now = readJson("package.json").version;
     fail(
-      "Say what to release: patch, minor, major, or an explicit X.Y.Z.\n" +
-        "  npm run release -- patch",
+      `Say which bump. There is no default.\n\n` +
+        ["patch", "minor", "major"]
+          .map(
+            (bump) =>
+              `  npm run release -- ${bump}    ${now} -> ${nextVersion(now, bump)}`,
+          )
+          .join("\n") +
+        `\n  npm run release -- X.Y.Z    an explicit version\n` +
+        `\nAdd --dry-run to see what a release would do without doing it.`,
     );
   }
   if (!options.branch) fail("--branch needs a branch name.");
