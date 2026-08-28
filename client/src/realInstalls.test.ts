@@ -58,6 +58,31 @@ if (missing.length > 0) {
 }
 const withFixtures = missing.length === 0 ? describe : describe.skip;
 
+/**
+ * The Val a fixture is really installed at, read from its own `node_modules`.
+ *
+ * Read rather than written down, because the fixtures are deliberately not all
+ * on the same Val: `npm` tracks a current one (the integration suite needs a
+ * server that announces `workspace/executeCommand` names — a Val too old to do
+ * that hid the collision that broke 1.1.0), while `pnpm` and `yarn` stay on
+ * 0.98, since they exist for their `node_modules` layout and an
+ * older-but-supported Val is worth keeping under test. A version literal here
+ * would fail the next time either is bumped, for no reason a reader could act
+ * on.
+ */
+function installedValVersion(valRoot: string): string {
+  const manifest = path.join(
+    valRoot,
+    "node_modules",
+    "@valbuild",
+    "next",
+    "package.json",
+  );
+  return JSON.parse(fs.readFileSync(manifest, "utf8")).version;
+}
+
+const SEMVER = /^\d+\.\d+\.\d+/;
+
 withFixtures("resolution against real installs", () => {
   for (const manager of ["npm", "pnpm", "yarn"] as const) {
     describe(manager, () => {
@@ -66,20 +91,29 @@ withFixtures("resolution against real installs", () => {
       test("resolves a launchable server entry", () => {
         const resolved = resolveLanguageServer(valRoot());
         expect(resolved).not.toBeNull();
-        expect(resolved!.version).toMatch(/^0\.98\./);
+        expect(resolved!.version).toMatch(SEMVER);
         expect(resolved!.override).toBeNull();
         expect(fs.existsSync(resolved!.entry)).toBe(true);
         expect(path.basename(resolved!.entry)).toBe("bin.js");
+        // Inside the fixture, not `client/node_modules`: this extension keeps a
+        // copy of the same package as a devDependency for its types, and
+        // resolving that one would make these fixtures prove nothing. The path
+        // is what tells them apart — the two versions can be, and often are,
+        // identical.
+        expect(resolved!.entry.startsWith(valRoot() + path.sep)).toBe(true);
       });
 
       test("reads the Val version off a carrier package, not off core", () => {
         // @valbuild/next@0.98.0 depends on @valbuild/core@0.97.7, so reading the
-        // version off core would report an up-to-date project as behind.
+        // version off core would report an up-to-date project as behind. The
+        // pnpm and yarn fixtures are still on that pair, which is what gives
+        // this assertion teeth — Val has since moved to lockstep versions, where
+        // reading the wrong package looks right.
         const detected = detectValVersion(valRoot());
         expect(detected).not.toBeNull();
         expect(detected!.packageName).toBe("@valbuild/next");
         expect(detected!.carriesLanguageServer).toBe(true);
-        expect(detected!.version).toMatch(/^0\.98\./);
+        expect(detected!.version).toBe(installedValVersion(valRoot()));
       });
 
       test("is diagnosed as ok", () => {
@@ -164,6 +198,8 @@ withFixtures("the handshake against a real server", () => {
   ): Promise<{
     capabilities: ValServerCapabilities | undefined;
     stderr: string;
+    /** What resolution read off disk, to check the wire against. */
+    resolvedVersion: string | null;
   }> {
     const resolved = resolveLanguageServer(valRoot);
     if (!resolved) {
@@ -197,7 +233,11 @@ withFixtures("the handshake against a real server", () => {
         capabilities: { experimental: { val: { pick: true, input: true } } },
         initializationOptions,
       });
-      return { capabilities: result.capabilities.experimental?.val, stderr };
+      return {
+        capabilities: result.capabilities.experimental?.val,
+        stderr,
+        resolvedVersion: resolved.version,
+      };
     } finally {
       // Never end/destroy the streams, and never send `exit`.
       connection.dispose();
@@ -212,7 +252,7 @@ withFixtures("the handshake against a real server", () => {
 
   for (const manager of ["npm", "pnpm", "yarn"] as const) {
     test(`negotiates protocol v1 and advertises features (${manager})`, async () => {
-      const { capabilities, stderr } = await handshake(
+      const { capabilities, stderr, resolvedVersion } = await handshake(
         path.join(fixtures, manager),
       );
       expect(capabilities).toBeDefined();
@@ -222,7 +262,10 @@ withFixtures("the handshake against a real server", () => {
       expect(capabilities!.protocolVersion).toBe(1);
       expect(capabilities!.features).toContain("diagnostics");
       expect(capabilities!.valRoot).toBe(path.join(fixtures, manager));
-      expect(capabilities!.versions.languageServer).toMatch(/^0\.98\./);
+      // What the server says over the wire is what resolution read off disk —
+      // the assertion a version literal was standing in for, and the one that
+      // survives a fixture bump.
+      expect(capabilities!.versions.languageServer).toBe(resolvedVersion);
       // Editors treat stderr noise from a language server as a startup failure.
       expect(stderr).toBe("");
     });
@@ -252,11 +295,11 @@ withFixtures("the handshake against a real server", () => {
   test("a mismatched handshake still returns a usable payload", async () => {
     // The client has to be able to name versions in the message it shows, so the
     // server must fill these in even when it is refusing to serve.
-    const { capabilities } = await handshake(path.join(fixtures, "npm"), {
-      min: 99,
-      max: 99,
-    });
-    expect(capabilities!.versions.languageServer).toMatch(/^0\.98\./);
+    const { capabilities, resolvedVersion } = await handshake(
+      path.join(fixtures, "npm"),
+      { min: 99, max: 99 },
+    );
+    expect(capabilities!.versions.languageServer).toBe(resolvedVersion);
     expect(capabilities!.valRoot).toBe(path.join(fixtures, "npm"));
   });
 

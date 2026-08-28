@@ -76,6 +76,22 @@ on. A Val package released after the extension was published therefore works
 without an extension update — which matters under pnpm, where a transitive
 dependency is reachable only through the package that depends on it.
 
+### Commands
+
+| Palette entry                      | Command id                        |
+| ---------------------------------- | --------------------------------- |
+| **Val: Log In**                    | `valBuild.login`                  |
+| **Val: Show Language Server Info** | `valBuild.showLanguageServerInfo` |
+
+Both moved from `val.` to `valBuild.` after 1.1.0, so a keybinding pointing at an
+old id needs updating. `val.` is the language server's namespace — the commands it
+serves (`val.login`, `val.uploadRemote`, `val.downloadRemote`) are registered
+under it, and a name used on both sides is a duplicate registration, which VS Code
+answers with an error that fails the server's whole handshake.
+
+**Val: Log In** is the palette entry to use: it runs against the Val root of the
+file you are in, and says why nothing happened if no server is running there.
+
 ### Settings
 
 | Setting                       | Default | Description                                                                                        |

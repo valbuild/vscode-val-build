@@ -3,13 +3,16 @@ import * as vscode from "vscode";
 import {
   CloseAction,
   ErrorAction,
+  ExecuteCommandRequest,
   LanguageClient,
   TransportKind,
   type CloseHandlerResult,
+  type DynamicFeature,
   type ErrorHandler,
   type ErrorHandlerResult,
   type LanguageClientOptions,
   type ServerOptions,
+  type StaticFeature,
 } from "vscode-languageclient/node";
 import { VAL_BUILD_URL, VAL_CONTENT_URL, VAL_REMOTE_HOST } from "./envConstants";
 import { findValRoots } from "./findValRoots";
@@ -23,8 +26,10 @@ import {
   resolveLanguageServer,
   type ResolvedLanguageServer,
 } from "./resolveLanguageServer";
+import { ServerCommandRouter } from "./serverCommands";
 import { detectValVersion, type DetectedValVersion } from "./valVersion";
 import { ValClientCapabilitiesFeature } from "./valClientCapabilitiesFeature";
+import { ValExecuteCommandFeature } from "./valExecuteCommandFeature";
 import {
   CLIENT_PROTOCOL_VERSIONS,
   VAL_INPUT_REQUEST,
@@ -45,8 +50,9 @@ import {
  * client's `documentSelector` is confined to its own root so two of them can
  * never both claim a file.
  *
- * Off by default — see `valBuild.useProjectLanguageServer`. Nothing here runs
- * unless the user opts in.
+ * That one-per-root shape is also why the server's own commands are routed
+ * rather than registered per client — see `serverCommands.ts`, and
+ * `ValLanguageClient` below.
  */
 
 export const EXTENSION_ID = "valbuild.vscode-val-build";
@@ -63,7 +69,7 @@ export type ProjectServerSession = {
   /** Features actually served — empty until `initialize` returns. */
   features: string[];
   state: "starting" | "running" | "incompatible" | "failed";
-  /** Why it is not running, for `val.showLanguageServerInfo`. */
+  /** Why it is not running, for `valBuild.showLanguageServerInfo`. */
   detail?: string;
 };
 
@@ -86,6 +92,28 @@ export class ProjectLanguageServers implements vscode.Disposable {
    * reported to the user as a failure.
    */
   private readonly stopping = new Set<string>();
+  /**
+   * The one VS Code registration per server command name, shared by every root.
+   *
+   * Owned here because it outlives any single client: a root's client stops and
+   * starts, and the command names it serves have to survive that without ever
+   * being registered twice.
+   */
+  private readonly serverCommands = new ServerCommandRouter({
+    registerCommand: (command, handler) =>
+      vscode.commands.registerCommand(command, handler),
+    activePath: () =>
+      vscode.window.activeTextEditor?.document.uri.fsPath ?? null,
+    toFsPath: (uri) => {
+      try {
+        return vscode.Uri.parse(uri).fsPath;
+      } catch {
+        return null;
+      }
+    },
+    log: (message) => this.log(message),
+    warn: (message) => void vscode.window.showWarningMessage(message),
+  });
 
   constructor(
     private readonly output: vscode.OutputChannel,
@@ -100,7 +128,7 @@ export class ProjectLanguageServers implements vscode.Disposable {
      *
      * A `LogOutputChannel` because that is what v10 requires, and separate from
      * `output` because its timestamp and level prefixes would mangle the
-     * `val.showLanguageServerInfo` report.
+     * `valBuild.showLanguageServerInfo` report.
      */
     private readonly serverOutput: vscode.LogOutputChannel,
     /**
@@ -196,6 +224,7 @@ export class ProjectLanguageServers implements vscode.Disposable {
       diagnosis.resolved,
       this.output,
       this.serverOutput,
+      this.serverCommands,
       () => this.stopping.has(valRoot),
     );
     this.clients.set(valRoot, client);
@@ -265,11 +294,11 @@ export class ProjectLanguageServers implements vscode.Disposable {
   }
 
   /**
-   * Run one of the server's own commands, for a palette entry.
+   * Run one of the server's own commands against a named root.
    *
-   * A code action's `command` is forwarded by `LanguageClient` on its own, so
-   * this exists only for the commands a user invokes directly rather than
-   * through a diagnostic.
+   * A code action's `command` reaches its server through `ServerCommandRouter`,
+   * which picks the root from the document the action is about. This is for the
+   * palette entries, where the caller has already decided which root it means.
    */
   async executeCommand(
     valRoot: string,
@@ -280,7 +309,7 @@ export class ProjectLanguageServers implements vscode.Disposable {
     if (!client) {
       throw new Error(`No Val language server is running for ${valRoot}.`);
     }
-    return client.sendRequest("workspace/executeCommand", {
+    return client.sendRequest(ExecuteCommandRequest.type, {
       command,
       arguments: args,
     });
@@ -292,6 +321,10 @@ export class ProjectLanguageServers implements vscode.Disposable {
       return;
     }
     this.clients.delete(valRoot);
+    // Stopping the client clears its features, which takes its commands out of
+    // the router. Done here as well because a client that never finished
+    // starting has nothing to clear.
+    this.serverCommands.removeRoot(valRoot);
     // Set before stopping, so the error handler knows the closure is expected.
     this.stopping.add(valRoot);
     this.onSessionsChanged();
@@ -333,6 +366,10 @@ export class ProjectLanguageServers implements vscode.Disposable {
       void this.stopOne(valRoot);
     }
     this.sessionsByRoot.clear();
+    // The command registrations are this object's, not the clients': a restart
+    // creates a new manager, and a name left in VS Code's registry would make
+    // the new one collide with the old.
+    this.serverCommands.dispose();
   }
 }
 
@@ -383,11 +420,58 @@ class ProjectServerErrorHandler implements ErrorHandler {
   }
 }
 
+/**
+ * A `LanguageClient` that leaves the server's commands to `ServerCommandRouter`.
+ *
+ * `vscode-languageclient` registers a VS Code command for every name in the
+ * server's `executeCommandProvider.commands`, once per client. VS Code's command
+ * registry is global, and `commands.registerCommand` throws on a name that is
+ * already taken — from inside `initialize`, so the throw does not cost one
+ * command, it fails the handshake and the user gets no Val at all.
+ *
+ * With one server per Val root that is a collision between roots; and in 1.1.0 it
+ * was a collision on the very first root, because the extension registered
+ * `val.login` itself for its palette entry. Against any Val that serves the
+ * command — 0.103 and later — the extension therefore started, failed to
+ * initialize every server, and offered nothing: no diagnostics, no quick fixes,
+ * no completions.
+ *
+ * `ValExecuteCommandFeature` takes the built-in's place, announcing the same
+ * client capability and registering the same names through the router, which
+ * keeps one registration per name however many roots serve it.
+ */
+class ValLanguageClient extends LanguageClient {
+  override registerFeature(
+    feature: StaticFeature | DynamicFeature<unknown>,
+  ): void {
+    if (isBuiltinExecuteCommandFeature(feature)) {
+      return;
+    }
+    super.registerFeature(feature);
+  }
+}
+
+/**
+ * The built-in feature to drop, told apart from ours by identity rather than by
+ * name: both answer for `workspace/executeCommand`, which is the point.
+ */
+function isBuiltinExecuteCommandFeature(
+  feature: StaticFeature | DynamicFeature<unknown>,
+): boolean {
+  if (feature instanceof ValExecuteCommandFeature) {
+    return false;
+  }
+  const registrationType = (feature as Partial<DynamicFeature<unknown>>)
+    .registrationType;
+  return registrationType?.method === ExecuteCommandRequest.method;
+}
+
 function createClient(
   valRoot: string,
   resolved: ResolvedLanguageServer,
   output: vscode.OutputChannel,
   serverOutput: vscode.LogOutputChannel,
+  serverCommands: ServerCommandRouter,
   isStopping: () => boolean,
 ): LanguageClient {
   // `module` + IPC rather than a manual spawn: IPC is faster and more robust
@@ -449,13 +533,21 @@ function createClient(
     ),
   };
 
-  const client = new LanguageClient(
+  const client = new ValLanguageClient(
     `valBuild:${valRoot}`,
     `Val (${path.basename(valRoot)})`,
     serverOptions,
     clientOptions,
   );
   client.registerFeature(new ValClientCapabilitiesFeature(CLIENT_CAPABILITIES));
+  client.registerFeature(
+    new ValExecuteCommandFeature(valRoot, serverCommands, (command, args) =>
+      client.sendRequest(ExecuteCommandRequest.type, {
+        command,
+        arguments: args,
+      }),
+    ),
+  );
   return client;
 }
 

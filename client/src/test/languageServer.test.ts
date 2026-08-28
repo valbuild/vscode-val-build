@@ -8,7 +8,9 @@ import {
   hasRealValFixture,
   noValRoot,
   oldValRoot,
+  openDocument,
   realValRoot,
+  waitForValDiagnostics,
 } from "./helper";
 
 /**
@@ -17,8 +19,9 @@ import {
  * Deliberately narrow. The launcher is all that is left of this extension —
  * every Val feature is served by `@valbuild/language-server` out of the user's
  * own project — so what is worth testing here is exactly what unit tests cannot
- * see: whether the extension activates, whether the two palette commands are
- * reachable, and whether a server is resolved and started per Val root.
+ * see: whether the extension activates, whether the palette commands and the
+ * server's own commands are reachable, whether a server is resolved and started
+ * per Val root, and whether its diagnostics arrive in the editor.
  *
  * The workspace has three Val roots in deliberately different states, so one
  * run exercises every branch of resolution at once:
@@ -27,7 +30,10 @@ import {
  *                          all. Must stay completely silent.
  *  - `fixtures/old-val`  — a healthy install of a Val too old to ship a language
  *                          server. Must say "upgrade", not "not found".
- *  - `fixtures/npm`      — a real Val that does ship one. The happy path.
+ *  - `fixtures/npm`      — a real Val that does ship one. The happy path. Kept
+ *                          on a current Val on purpose: a Val old enough to
+ *                          announce no `workspace/executeCommand` names hid the
+ *                          command collision that broke 1.1.0 entirely.
  */
 suite("Language server launcher", () => {
   suiteSetup(async () => {
@@ -42,13 +48,16 @@ suite("Language server launcher", () => {
     assert.strictEqual(extension.isActive, true);
   });
 
-  test("exactly the contributed commands are registered", async () => {
+  test("the contributed commands are registered, under valBuild.", async () => {
     const commands = await vscode.commands.getCommands(true);
-    for (const command of ["val.login", "val.showLanguageServerInfo"]) {
+    for (const command of [
+      "valBuild.login",
+      "valBuild.showLanguageServerInfo",
+    ]) {
       assert.ok(commands.includes(command), `${command} is not registered`);
     }
     // The six commands that used to live here are code actions on the language
-    // server now, and an LSP client forwards a code action's command itself. A
+    // server now, and a code action's command is registered by the client. A
     // leftover registration would shadow the server's own.
     for (const gone of [
       "val.uploadRemoteFile",
@@ -65,6 +74,34 @@ suite("Language server launcher", () => {
     }
   });
 
+  (hasRealValFixture() ? test : test.skip)(
+    "the server's own commands are registered once, by the router",
+    async () => {
+      // The regression test for 1.1.0's startup failure. The extension
+      // registered `val.login` for its palette entry; every Val from 0.103 on
+      // announces a `val.login` command of its own, which the language client
+      // then registers too — and a duplicate registration throws from inside
+      // `initialize`, so the server never finished starting and no Val feature
+      // worked at all.
+      //
+      // Both halves of the fix are visible here: the names below exist (so the
+      // handshake got as far as registering them, and a quick fix whose command
+      // is one of them can be applied), and the "starts a server" test above
+      // asserts the session actually reached `running`.
+      const commands = await vscode.commands.getCommands(true);
+      for (const command of [
+        "val.login",
+        "val.uploadRemote",
+        "val.downloadRemote",
+      ]) {
+        assert.ok(
+          commands.includes(command),
+          `${command} is not registered; the handshake did not get that far`,
+        );
+      }
+    },
+  );
+
   test("only languageServerPath is contributed", async () => {
     const configuration = vscode.workspace.getConfiguration("valBuild");
     assert.strictEqual(configuration.get("languageServerPath"), "");
@@ -80,9 +117,9 @@ suite("Language server launcher", () => {
     }
   });
 
-  test("val.showLanguageServerInfo reports the workspace's Val roots", async () => {
+  test("valBuild.showLanguageServerInfo reports the workspace's Val roots", async () => {
     const report = await vscode.commands.executeCommand<string>(
-      "val.showLanguageServerInfo",
+      "valBuild.showLanguageServerInfo",
     );
     assert.ok(report, "the command returned nothing");
     // Root detection is per-package, and a monorepo with several Val roots is
@@ -102,7 +139,7 @@ suite("Language server launcher", () => {
     // dependencies are not installed" looks like. Nagging here would make the
     // extension unusable in any workspace that also holds non-Val packages.
     const report = await vscode.commands.executeCommand<string>(
-      "val.showLanguageServerInfo",
+      "valBuild.showLanguageServerInfo",
     );
     assert.ok(report);
     assert.match(report, new RegExp(`Val roots in workspace: .*no-val`));
@@ -119,7 +156,7 @@ suite("Language server launcher", () => {
       // generic error. With no bundled server to fall back on, this message is
       // the entire user experience for such a project, so it has to be right.
       const report = await vscode.commands.executeCommand<string>(
-        "val.showLanguageServerInfo",
+        "valBuild.showLanguageServerInfo",
       );
       assert.ok(report);
       const marker = `--- ${oldValRoot()} ---`;
@@ -140,7 +177,7 @@ suite("Language server launcher", () => {
       // @valbuild/language-server: resolve it out of the project's node_modules,
       // launch it, negotiate, and read back what it says it can do.
       const report = await vscode.commands.executeCommand<string>(
-        "val.showLanguageServerInfo",
+        "valBuild.showLanguageServerInfo",
       );
       assert.ok(report, "the command returned nothing");
       const marker = `--- ${realValRoot()} ---`;
@@ -150,6 +187,29 @@ suite("Language server launcher", () => {
       assert.match(section, /protocol version: 1/);
       assert.match(section, /features: .*diagnostics/);
       assert.match(section, /override: +none/);
+    },
+  );
+
+  (hasRealValFixture() ? test : test.skip)(
+    "the server's diagnostics reach the editor",
+    async () => {
+      // "It starts" is not "it works". A session in `running` proves the
+      // handshake finished; this proves the thing the user actually notices — and
+      // is the symptom that reached us when the handshake did not finish, since a
+      // client that fails to initialize also never sends `textDocument/didOpen`.
+      //
+      // `content/errors.val.ts` is a plain string one character short of its
+      // schema, which every Val old enough to ship a language server reports.
+      const document = await openDocument(
+        realValRoot(),
+        "content/errors.val.ts",
+      );
+      const diagnostics = await waitForValDiagnostics(document.uri);
+      assert.ok(
+        diagnostics.length > 0,
+        "the language server published no diagnostics for a module that has an error",
+      );
+      assert.match(diagnostics[0].message, /at least 30 characters/);
     },
   );
 
@@ -178,7 +238,7 @@ suite("Language server launcher", () => {
       try {
         await new Promise((resolve) => setTimeout(resolve, 8000));
         const report = await vscode.commands.executeCommand<string>(
-          "val.showLanguageServerInfo",
+          "valBuild.showLanguageServerInfo",
         );
         assert.ok(report);
         const marker = `--- ${oldValRoot()} ---`;
