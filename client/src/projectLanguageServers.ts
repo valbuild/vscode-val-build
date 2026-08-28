@@ -106,7 +106,12 @@ export class ProjectLanguageServers implements vscode.Disposable {
       vscode.window.activeTextEditor?.document.uri.fsPath ?? null,
     toFsPath: (uri) => {
       try {
-        return vscode.Uri.parse(uri).fsPath;
+        const parsed = vscode.Uri.parse(uri);
+        // Only a `file:` URI has a path a Val root can contain. `Uri.parse` is
+        // not strict, so `untitled:Untitled-1` parses happily and yields an
+        // `fsPath` that belongs to no root — which would stop routing rather
+        // than fall through to the active editor.
+        return parsed.scheme === "file" ? parsed.fsPath : null;
       } catch {
         return null;
       }

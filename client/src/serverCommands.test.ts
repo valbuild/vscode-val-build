@@ -38,7 +38,9 @@ function fakeHost(overrides: Partial<ServerCommandRouterHost> = {}) {
       };
     },
     activePath: () => null,
-    // Enough of vscode.Uri.parse for `file://` URIs.
+    // The host contract: a `file:` URI's path, and null for every other scheme.
+    // The real one is `vscode.Uri.parse`, which is not strict — hence the scheme
+    // check there too, or an `untitled:` argument would yield a path.
     toFsPath: (uri) =>
       uri.startsWith("file://") ? decodeURIComponent(uri.slice(7)) : null,
     log: () => undefined,
@@ -219,6 +221,29 @@ describe("ServerCommandRouter", () => {
     router.removeRoot(ROOT_A);
     router.add(registration);
     expect(await registered.get("val.login")?.()).toBe("second");
+  });
+
+  test("two registrations of one command in one root are still one root", () => {
+    // A server may announce a command in `initialize` and register it again
+    // dynamically. Counted twice, that reads as two candidate roots and defeats
+    // the "there is only one root" fallback — so a palette command would refuse
+    // to run in a single-root workspace.
+    const { host, registered } = fakeHost();
+    const router = new ServerCommandRouter(host);
+    const ran: string[] = [];
+    for (const id of ["static-0", "dynamic-1"]) {
+      router.add({
+        id,
+        valRoot: ROOT_A,
+        commands: ["val.login"],
+        execute: async () => {
+          ran.push(id);
+        },
+      });
+    }
+    return Promise.resolve(registered.get("val.login")?.()).then(() => {
+      expect(ran).toEqual(["static-0"]);
+    });
   });
 
   test("a name the editor already owns costs that command, not the start-up", () => {

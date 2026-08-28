@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import type { ExtensionContext } from "vscode";
-import { findValRoots } from "./findValRoots";
+import { findValRoots, valRootFor } from "./findValRoots";
 import { formatLanguageServerInfo } from "./languageServerInfo";
 import { ProjectLanguageServers } from "./projectLanguageServers";
 
@@ -158,10 +158,15 @@ function activeSession() {
   );
   const activePath = vscode.window.activeTextEditor?.document.uri.fsPath;
   if (activePath) {
-    const match = sessions
-      .filter((session) => activePath.startsWith(session.valRoot))
-      // The innermost root wins in a nested workspace.
-      .sort((a, b) => b.valRoot.length - a.valRoot.length)[0];
+    // `valRootFor` rather than `startsWith`, which matches a sibling that merely
+    // shares a prefix: a file in `/repo/apps/web-tools` would log you into
+    // `/repo/apps/web`. It also picks the innermost root, which is what a nested
+    // package in a monorepo needs.
+    const valRoot = valRootFor(
+      activePath,
+      sessions.map((session) => session.valRoot),
+    );
+    const match = sessions.find((session) => session.valRoot === valRoot);
     if (match) {
       return match;
     }
