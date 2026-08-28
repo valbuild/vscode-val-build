@@ -1,0 +1,9 @@
+{
+  "name": "val-resolution-fixture-old-val",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Resolution fixture: a Val older than the first release that ships a language server.",
+  "dependencies": {
+    "@valbuild/next": "0.97.7"
+  }
+}

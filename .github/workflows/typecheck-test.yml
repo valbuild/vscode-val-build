@@ -14,16 +14,30 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Install dependencies
-        run: |
-          npm install
+        run: npm install
+
+      # Resolution depends on how each package manager lays out node_modules, so
+      # the fixtures are real installs from committed lockfiles. Tests that need
+      # them skip when absent, which would hide a resolution regression.
+      - name: Enable pnpm and yarn
+        run: corepack enable
+
+      - name: Install resolution fixtures
+        run: npm run install-fixtures
+
+      - name: Compile
+        run: npm run compile
+
+      - name: Lint
+        run: npm run lint
 
       - name: Run client tests & typecheck
         run: |
@@ -31,8 +45,13 @@ jobs:
           npm test
           npm run typecheck
 
-      - name: Run server tests & typecheck
-        run: |
-          cd server
-          npm test
-          npm run typecheck
+      # Launches a real VS Code, which needs a display on Linux.
+      - name: Run integration tests
+        run: xvfb-run -a npm test
+
+      # Two silent packaging mistakes the design makes possible: a bundled
+      # server coming back, and a value import of @valbuild/language-server
+      # pulling the whole server into the bundle. Both are invisible without
+      # this check.
+      - name: Verify what the VSIX contains
+        run: node scripts/verify-vsix.mjs

@@ -1,0 +1,9 @@
+{
+  "name": "val-resolution-fixture-pnpm",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Resolution fixture: a project whose only Val dependency is @valbuild/next, installed with pnpm.",
+  "dependencies": {
+    "@valbuild/next": "^0.98.0"
+  }
+}

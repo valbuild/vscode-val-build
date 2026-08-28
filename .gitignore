@@ -3,3 +3,7 @@ node_modules
 client/server
 .vscode-test
 *.vsix
+*.tsbuildinfo
+# Written by the integration suite when it flips valBuild.useProjectLanguageServer
+# on for the fixture workspace.
+fixtures/no-val/.vscode

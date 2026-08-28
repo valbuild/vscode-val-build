@@ -1,11 +1,19 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
     "target": "es2020",
     "lib": ["es2020"],
+    // `node16` rather than classic `node`/node10: vscode-languageclient 10 ships
+    // an `exports` map, so `vscode-languageclient/node` is unresolvable without
+    // it (and TypeScript 6 rejects node10 outright as deprecated). The emit stays
+    // CommonJS, because client/package.json declares no `"type": "module"` —
+    // which is what both esbuild and the VS Code extension host expect.
+    "module": "node16",
+    "moduleResolution": "node16",
     "outDir": "out",
     "rootDir": "src",
     "sourceMap": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
     "skipLibCheck": true
   },
   "include": ["src"],
