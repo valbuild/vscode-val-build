@@ -39,6 +39,48 @@ export async function activate(
   return document;
 }
 
+/**
+ * Open a file in a named Val root, without waiting for anything.
+ *
+ * Separate from `activate`'s fixed sleep because what a caller is waiting for
+ * differs — see `waitForValDiagnostics`.
+ */
+export async function openDocument(
+  valRoot: string,
+  relativePath: string,
+): Promise<vscode.TextDocument> {
+  const document = await vscode.workspace.openTextDocument(
+    vscode.Uri.file(path.join(valRoot, relativePath)),
+  );
+  await vscode.window.showTextDocument(document);
+  return document;
+}
+
+/**
+ * Wait for the language server's diagnostics to reach the editor.
+ *
+ * Polled rather than slept on: the server evaluates the whole project on the
+ * first request, so how long the first publish takes depends on the machine, and
+ * a sleep long enough for CI would be one nobody wants to wait for locally.
+ * Returns whatever Val published, or an empty array if it published nothing in
+ * time — the assertion belongs to the caller.
+ */
+export async function waitForValDiagnostics(
+  uri: vscode.Uri,
+  timeoutMs = 30000,
+): Promise<vscode.Diagnostic[]> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const fromVal = vscode.languages
+      .getDiagnostics(uri)
+      .filter((diagnostic) => diagnostic.source === "val");
+    if (fromVal.length > 0 || Date.now() > deadline) {
+      return fromVal;
+    }
+    await sleep(250);
+  }
+}
+
 export const getDocPath = (p: string): string =>
   path.resolve(__dirname, "../../../fixtures/no-val", p);
 

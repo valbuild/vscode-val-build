@@ -27,11 +27,11 @@
   "contributes": {
     "commands": [
       {
-        "command": "val.login",
+        "command": "valBuild.login",
         "title": "Val: Log In"
       },
       {
-        "command": "val.showLanguageServerInfo",
+        "command": "valBuild.showLanguageServerInfo",
         "title": "Val: Show Language Server Info"
       }
     ],

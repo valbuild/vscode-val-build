@@ -80,8 +80,25 @@ export function activate(context: ExtensionContext) {
   void startProjectServers(context);
 }
 
+/**
+ * The command ids this extension owns live under `valBuild.`, and the server's
+ * live under `val.`.
+ *
+ * Not cosmetic: VS Code's command registry is global, and an LSP client has to
+ * register every command name its server announces — so a name used on both
+ * sides is a duplicate registration, which `registerCommand` answers with a
+ * throw. It throws from inside `initialize`, so the cost is not one command but
+ * the whole handshake.
+ *
+ * That is exactly what 1.1.0 did: it registered `val.login` for its palette
+ * entry, and Val 0.103 and later announce a `val.login` command of their own. The
+ * result was an extension that started and then served nothing. Namespacing the
+ * two sides apart is what makes the collision impossible rather than unlikely,
+ * and `contributedCommands.test.ts` checks it against the published server.
+ */
+
 /** Palette entry: `Val: Show Language Server Info`. */
-const SHOW_INFO_COMMAND = "val.showLanguageServerInfo";
+const SHOW_INFO_COMMAND = "valBuild.showLanguageServerInfo";
 /**
  * Palette entry: `Val: Log In`.
  *
@@ -89,8 +106,13 @@ const SHOW_INFO_COMMAND = "val.showLanguageServerInfo";
  * the token next to the project). This forwards to whichever server serves the
  * active file's Val root — a monorepo can have several, and they can be logged
  * in separately.
+ *
+ * Kept as an entry of this extension's own, rather than left to the `val.login`
+ * the language client registers, because only this side can tell the user *why*
+ * nothing happened when no server is running, and can pick a root when several
+ * are.
  */
-const LOGIN_COMMAND = "val.login";
+const LOGIN_COMMAND = "valBuild.login";
 /** The server-side command name. Advertised in the handshake's `commands`. */
 const SERVER_LOGIN_COMMAND = "val.login";
 

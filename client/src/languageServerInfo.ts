@@ -1,7 +1,7 @@
 import type { ProjectServerSession } from "./projectLanguageServers";
 
 /**
- * The report behind `val.showLanguageServerInfo`.
+ * The report behind `valBuild.showLanguageServerInfo`.
  *
  * This is what makes the resolution mechanism debuggable in the field: which
  * path was resolved, through which anchor, at which version, whether an override
