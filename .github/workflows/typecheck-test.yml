@@ -45,19 +45,13 @@ jobs:
           npm test
           npm run typecheck
 
-      - name: Run server tests & typecheck
-        run: |
-          cd server
-          npm test
-          npm run typecheck
-
       # Launches a real VS Code, which needs a display on Linux.
       - name: Run integration tests
         run: xvfb-run -a npm test
 
-      # The bundled language server is not bundled by esbuild and requires its
-      # dependencies by name at runtime, so a packaging rule that drops one
-      # produces a VSIX whose server cannot start — with no error anywhere. This
-      # packages the extension and launches the server out of the archive.
-      - name: Verify the packaged server starts
+      # Two silent packaging mistakes the design makes possible: a bundled
+      # server coming back, and a value import of @valbuild/language-server
+      # pulling the whole server into the bundle. Both are invisible without
+      # this check.
+      - name: Verify what the VSIX contains
         run: node scripts/verify-vsix.mjs
