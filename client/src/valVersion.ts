@@ -1,6 +1,6 @@
-import { createRequire } from "node:module";
 import * as fs from "fs";
 import * as path from "path";
+import { findPackageJson } from "./findPackageJson";
 
 /**
  * Which Val packages a project has, and which of them should be carrying a
@@ -115,15 +115,18 @@ export const VAL_LANGUAGE_SERVER = "@valbuild/language-server";
  *
  * A package that should carry a language server is preferred over a library one,
  * because it is the package the user would act on. Resolution walks up the
- * directory tree, exactly as Node does for the project's own code: a Val
- * reachable from the root is a Val the project really has.
+ * directory tree, as Node does for the project's own code — but only that far.
+ * A Val on a *global* module path is not one the project has, and treating it as
+ * one would mean nagging "upgrade Val" at a project that has no Val at all; see
+ * `findPackageJson`.
  */
 export function detectValVersion(valRoot: string): DetectedValVersion | null {
-  const require_ = createRequire(path.join(valRoot, "package.json"));
-
   const read = (packageName: string): DetectedValVersion | null => {
     try {
-      const pkgPath = require_.resolve(`${packageName}/package.json`);
+      const pkgPath = findPackageJson(packageName, valRoot);
+      if (pkgPath === null) {
+        return null;
+      }
       const version = JSON.parse(fs.readFileSync(pkgPath, "utf8")).version;
       if (typeof version !== "string" || !version) {
         return null;

@@ -1,6 +1,6 @@
-import { createRequire } from "node:module";
 import * as fs from "fs";
 import * as path from "path";
+import { findPackageJson } from "./findPackageJson";
 import { declaredValPackages, VAL_LANGUAGE_SERVER } from "./valVersion";
 
 /**
@@ -51,7 +51,8 @@ const BIN_NAME = "val-language-server";
  *
  * `@valbuild/next` and `@valbuild/cli` are appended as a fallback for a manifest
  * that declares its dependencies elsewhere (a monorepo root, a generated
- * package.json). Trying a package that is not there simply throws and moves on.
+ * package.json). An anchor that is not installed simply does not resolve, and
+ * the next one is tried.
  */
 function anchorsFor(valRoot: string): (string | null)[] {
   const declared = declaredValPackages(valRoot);
@@ -101,18 +102,24 @@ export function resolveLanguageServer(
     };
   }
 
-  const rootPkg = path.join(valRoot, "package.json");
   for (const anchor of anchorsFor(valRoot)) {
     try {
-      const from =
-        anchor === null
-          ? rootPkg
-          : createRequire(rootPkg).resolve(`${anchor}/package.json`);
-      // Works because `./package.json` is in the package's `exports` map —
-      // Node's exports enforcement would otherwise block the subpath.
-      const pkgPath = createRequire(from).resolve(
-        `${PACKAGE_NAME}/package.json`,
-      );
+      // Where the search for the server starts: the project itself, or the
+      // directory of the anchor package. Under pnpm the anchor's directory is
+      // inside the store, and that is the only place its own transitive
+      // dependencies are reachable from.
+      let searchFrom: string | null = valRoot;
+      if (anchor !== null) {
+        const anchorPkg = findPackageJson(anchor, valRoot);
+        searchFrom = anchorPkg === null ? null : path.dirname(anchorPkg);
+      }
+      if (searchFrom === null) {
+        continue;
+      }
+      const pkgPath = findPackageJson(PACKAGE_NAME, searchFrom);
+      if (pkgPath === null) {
+        continue;
+      }
       const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
       const binRel = pkg.bin?.[BIN_NAME];
       if (!binRel) {
@@ -127,7 +134,7 @@ export function resolveLanguageServer(
         override: null,
       };
     } catch {
-      // Try the next anchor.
+      // An unreadable or malformed package.json. Try the next anchor.
     }
   }
   return null;
