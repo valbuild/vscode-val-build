@@ -17,4 +17,15 @@ set -euo pipefail
 # like its cause. Unset it.
 unset ELECTRON_RUN_AS_NODE
 
-node "$(dirname "$0")/../client/out/test/runTest"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+# The suite runs compiled JavaScript, and `client/out` is generated and
+# gitignored, so `npm test` on a fresh checkout would otherwise fail with
+#
+#   Error: Cannot find module '.../client/out/test/runTest'
+#
+# which names the symptom and not the cause. `tsc -b` is incremental, so this
+# costs nothing on a tree that is already built.
+npm --prefix "$ROOT" run compile
+
+node "$ROOT/client/out/test/runTest"
