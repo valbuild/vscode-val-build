@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process";
-import { createRequire } from "node:module";
 import * as fs from "fs";
 import * as path from "path";
 import {
@@ -135,17 +134,19 @@ withFixtures("resolution against real installs", () => {
   test("pnpm needs the anchor walk: root-only resolution genuinely fails there", () => {
     // The reason resolveLanguageServer goes *through* @valbuild/next instead of
     // straight from the project root. Pinned so nobody simplifies it away.
+    //
+    // The absent directory is the assertion: under pnpm's isolated layout the
+    // project's node_modules holds only its direct dependencies, so root-only
+    // resolution has nowhere to look. Expecting `createRequire(...).resolve()`
+    // to throw would say the same thing less reliably — Node appends its global
+    // folders ($NODE_PATH, ~/.node_modules) to every bare specifier, so on a
+    // machine that has one it does not throw at all.
     const pnpmRoot = path.join(fixtures, "pnpm");
     expect(
       fs.existsSync(
         path.join(pnpmRoot, "node_modules", "@valbuild", "language-server"),
       ),
     ).toBe(false);
-    expect(() =>
-      createRequire(path.join(pnpmRoot, "package.json")).resolve(
-        "@valbuild/language-server/package.json",
-      ),
-    ).toThrow();
 
     const resolved = resolveLanguageServer(pnpmRoot);
     expect(resolved).not.toBeNull();

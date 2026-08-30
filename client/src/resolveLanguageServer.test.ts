@@ -181,12 +181,42 @@ describe("resolveLanguageServer", () => {
   });
 
   test("the naive root-only resolution this replaces really does fail under pnpm", () => {
-    // Pins *why* the anchor walk exists, so nobody simplifies it away.
+    // Pins *why* the anchor walk exists, so nobody simplifies it away. The
+    // project's node_modules holds only its direct dependencies, so root-only
+    // resolution has nowhere to find the server: that is its whole search
+    // space, and it is empty.
+    //
+    // Asserted against the tree rather than by expecting
+    // `require.resolve(LS, { paths: [tmp] })` to throw, because it does not
+    // reliably throw: Node searches its global folders too, which is the
+    // subject of the next test.
     isolatedProject(tmp, "0.98.0");
-    expect(() =>
-      require.resolve(`${LS}/package.json`, { paths: [tmp] }),
-    ).toThrow();
+    expect(fs.existsSync(path.join(tmp, "node_modules", LS))).toBe(false);
     expect(resolveLanguageServer(tmp)).not.toBeNull();
+  });
+
+  test("a language server outside the project's node_modules is not used", () => {
+    // Resolution must reach only what the project itself has. It used to go
+    // through `createRequire(...).resolve()`, and Node appends its global
+    // folders — $NODE_PATH, ~/.node_modules, ~/.node_libraries,
+    // $PREFIX/lib/node — to every bare-specifier lookup, with no way to opt
+    // out. So a pnpm-installed checkout of *this repository*, which puts its
+    // own @valbuild/language-server on $NODE_PATH, had the extension serve
+    // every project from that copy: a version with no relation to the
+    // project's Val, handed even to projects with no Val installed at all,
+    // which are exactly the ones that must stay silent.
+    const project = path.join(tmp, "app");
+    writeJson(path.join(project, "package.json"), { name: "app" });
+    // A real, complete, launchable copy — found by any resolution that looks
+    // beyond the project's own node_modules chain, and by none that does not.
+    writePackage(
+      path.join(tmp, "elsewhere", "@valbuild", "language-server"),
+      { name: LS, version: "9.9.9" },
+      { bin: true },
+    );
+
+    expect(resolveLanguageServer(project)).toBeNull();
+    expect(detectValVersion(project)).toBeNull();
   });
 
   test("resolves through @valbuild/next when the server is nested under it", () => {
