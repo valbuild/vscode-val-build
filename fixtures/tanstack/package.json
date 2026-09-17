@@ -1,0 +1,11 @@
+{
+  "name": "val-resolution-fixture-tanstack",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Resolution fixture: a TanStack Start project whose framework package is @valbuild/tanstack, installed with pnpm.",
+  "dependencies": {
+    "@valbuild/core": "^0.129.0",
+    "@valbuild/tanstack": "^0.129.0"
+  }
+}

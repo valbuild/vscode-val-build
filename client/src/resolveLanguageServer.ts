@@ -44,10 +44,11 @@ const BIN_NAME = "val-language-server";
  *
  * Taken from the project's `package.json` rather than from a list baked in here.
  * Val ships the language server inside whichever package a project depends on
- * directly — `@valbuild/next` today, `@valbuild/tanstackstart-react` next — and
- * a hard-coded list would mean a project on a new framework package silently
- * failing to resolve under pnpm until the extension shipped an update. Which is
- * exactly the coupling this whole migration exists to remove.
+ * directly — `@valbuild/next` for Next.js, `@valbuild/tanstack` for TanStack
+ * Start, and whatever framework comes next — and a hard-coded list would mean a
+ * project on a new framework package silently failing to resolve under pnpm
+ * until the extension shipped an update. Which is exactly the coupling this
+ * whole migration exists to remove.
  *
  * `@valbuild/next` and `@valbuild/cli` are appended as a fallback for a manifest
  * that declares its dependencies elsewhere (a monorepo root, a generated

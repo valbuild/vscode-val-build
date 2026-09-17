@@ -102,13 +102,15 @@ describe("diagnoseLanguageServer", () => {
   });
 
   test("points an unknown framework package at itself, with no invented floor", () => {
-    // A package released after this build: there is no version to name, so the
-    // message must not claim one, and upgrading it is the first thing to try.
+    // A framework package released after this build — there is no such package
+    // as @valbuild/astro today, which is the point. There is no version to name,
+    // so the message must not claim one, and upgrading it is the first thing to
+    // try.
     const result = diagnoseLanguageServer({
       resolved: null,
       detected: {
         version: "1.4.0",
-        packageName: "@valbuild/tanstackstart-react",
+        packageName: "@valbuild/astro",
         carriesLanguageServer: true,
         shipsSince: null,
       },
@@ -119,12 +121,12 @@ describe("diagnoseLanguageServer", () => {
       return;
     }
     expect(result.reason).toBe("server-unresolvable");
-    expect(result.message).toContain("@valbuild/tanstackstart-react 1.4.0");
+    expect(result.message).toContain("@valbuild/astro 1.4.0");
     expect(result.message).not.toContain("0.98.0");
     expect(result.actions[0]).toEqual({
-      title: "Upgrade @valbuild/tanstackstart-react",
+      title: "Upgrade @valbuild/astro",
       kind: "run-command",
-      value: "pnpm update @valbuild/tanstackstart-react@latest",
+      value: "pnpm update @valbuild/astro@latest",
     });
   });
 
@@ -152,7 +154,7 @@ describe("diagnoseLanguageServer", () => {
     expect(result.message).not.toContain(MIN_VAL_VERSION);
     // Named so a Next.js or TanStack Start project knows which one it wants.
     expect(result.message).toContain("@valbuild/next");
-    expect(result.message).toContain("@valbuild/tanstackstart-react");
+    expect(result.message).toContain("@valbuild/tanstack");
     expect(result.actions).toEqual([
       {
         title: "Add @valbuild/cli",
