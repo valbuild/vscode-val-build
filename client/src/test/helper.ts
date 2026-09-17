@@ -104,7 +104,7 @@ export async function waitForRunningSession(
       "valBuild.showLanguageServerInfo",
     );
     if (report && report.includes(marker)) {
-      section = report.slice(report.indexOf(marker));
+      section = sectionFor(report, marker);
       if (/state: +running/.test(section)) {
         return section;
       }
@@ -114,6 +114,21 @@ export async function waitForRunningSession(
     }
     await sleep(250);
   }
+}
+
+/**
+ * One root's section of the report, bounded at the next root.
+ *
+ * Slicing to the end of the report would let a LATER session's `state: running`
+ * answer for this one — so a root that is still starting, or that failed, reads
+ * as running as long as something below it is up. `fixtures/tanstack` happens to
+ * sort last today, which is exactly the kind of accident that stops being true
+ * when someone adds a fixture.
+ */
+function sectionFor(report: string, marker: string): string {
+  const start = report.indexOf(marker);
+  const next = report.indexOf("\n--- ", start + marker.length);
+  return next === -1 ? report.slice(start) : report.slice(start, next);
 }
 
 export const getDocPath = (p: string): string =>

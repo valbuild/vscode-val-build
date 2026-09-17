@@ -186,17 +186,20 @@ suite("Language server launcher", () => {
       // The happy path, end to end, against the published
       // @valbuild/language-server: resolve it out of the project's node_modules,
       // launch it, negotiate, and read back what it says it can do.
-      const report = await vscode.commands.executeCommand<string>(
-        "valBuild.showLanguageServerInfo",
-      );
-      assert.ok(report, "the command returned nothing");
-      const marker = `--- ${realValRoot()} ---`;
-      assert.ok(report.includes(marker), `no npm section in:\n${report}`);
-      const section = report.slice(report.indexOf(marker));
+      const section = await waitForRunningSession(realValRoot());
+      assert.ok(section, "no npm section in the report");
       assert.match(section, /state: +running/);
       assert.match(section, /protocol version: 1/);
       assert.match(section, /features: .*diagnostics/);
       assert.match(section, /override: +none/);
+      // `npm` is the FIRST root in the report — the roots are ordered shortest
+      // path first — so this is also what proves the section is bounded at the
+      // next one. Read to the end of the report instead and every assertion
+      // above could be satisfied by a different root's session.
+      assert.ok(
+        !section.includes(`--- ${tanstackValRoot()} ---`),
+        `the npm section ran into a later root:\n${section}`,
+      );
     },
   );
 
@@ -208,8 +211,9 @@ suite("Language server launcher", () => {
       // is the symptom that reached us when the handshake did not finish, since a
       // client that fails to initialize also never sends `textDocument/didOpen`.
       //
-      // `content/errors.val.ts` is a plain string one character short of its
-      // schema, which every Val old enough to ship a language server reports.
+      // `content/errors.val.ts` is a plain string well under its schema's
+      // minimum length, which every Val old enough to ship a language server
+      // reports.
       const document = await openDocument(
         realValRoot(),
         "content/errors.val.ts",

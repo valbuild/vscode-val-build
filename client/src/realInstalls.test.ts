@@ -555,8 +555,8 @@ withFixtures("a TanStack Start project, evaluated by its own server", () => {
 
   test("reports a validation error in a TanStack project's content", async () => {
     // And the other half: silence is only meaningful if this server is capable
-    // of speaking. `src/content/errors.val.ts` is a string one character short
-    // of its schema — the same module the npm fixture uses, so the two projects
+    // of speaking. `src/content/errors.val.ts` is a string well under its
+    // schema's minimum length — the same module the npm fixture uses, so the two
     // are being held to the same standard.
     const published = await diagnosticsFor(valRoot(), [
       "src/content/errors.val.ts",
