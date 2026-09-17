@@ -23,6 +23,14 @@ import { detectValVersion, MIN_VAL_VERSION } from "./valVersion";
  * is how a package manager actually lays a tree out. `npm run install-fixtures`
  * recreates them.
  *
+ * **Regenerate a pnpm fixture's lockfile with the pnpm CI uses**, which is why
+ * `fixtures/tanstack` pins `packageManager`. pnpm 12 enforces a
+ * `minimumReleaseAge` supply-chain policy and resolves *around* it, picking the
+ * newest version old enough to pass; pnpm 10 has no such policy and takes the
+ * newest full stop. A lockfile written by the older one is rejected outright by
+ * `--frozen-lockfile` on the newer — and TanStack publishes several times a day,
+ * so this fixture is the one where that difference is never theoretical.
+ *
  * The pnpm fixture is the one that earns its keep. `@valbuild/language-server` is
  * a transitive dependency, so under pnpm's isolated `node_modules` it is not
  * reachable from the project root at all — a naive
