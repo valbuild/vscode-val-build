@@ -256,25 +256,29 @@ describe("resolveLanguageServer", () => {
   test("resolves through a framework package this build has never heard of", () => {
     // The anchors come from the project's own package.json, not from a list baked
     // into the extension. So a project on a Val framework package released after
-    // this extension was built — @valbuild/tanstackstart-react, say — resolves
-    // under pnpm without an extension update. A hard-coded [next, cli] list would
-    // silently fail here, because under pnpm's isolated node_modules the language
-    // server is reachable *only* through the package that depends on it.
-    isolatedProject(tmp, "0.98.0", "tanstackstart-react");
+    // this extension was built — @valbuild/astro, say, which does not exist —
+    // resolves under pnpm without an extension update. A hard-coded [next, cli]
+    // list would silently fail here, because under pnpm's isolated node_modules
+    // the language server is reachable *only* through the package that depends
+    // on it.
+    //
+    // `fixtures/tanstack` is the same claim against a real install of a real
+    // second framework package; see realInstalls.test.ts.
+    isolatedProject(tmp, "0.98.0", "astro");
     const resolved = resolveLanguageServer(tmp);
     expect(resolved).not.toBeNull();
-    expect(resolved!.via).toBe("@valbuild/tanstackstart-react");
+    expect(resolved!.via).toBe("@valbuild/astro");
     expect(fs.existsSync(resolved!.entry)).toBe(true);
   });
 
   test("an unknown framework package is treated as one that should carry a server", () => {
     // No known floor for it, so it is never called "too old" — that would be a
     // guess. It is still the package reported and the one the user is pointed at.
-    isolatedProject(tmp, "1.4.0", "tanstackstart-react");
+    isolatedProject(tmp, "1.4.0", "astro");
     const detected = detectValVersion(tmp);
     expect(detected).toEqual({
       version: "1.4.0",
-      packageName: "@valbuild/tanstackstart-react",
+      packageName: "@valbuild/astro",
       carriesLanguageServer: true,
       shipsSince: null,
     });

@@ -15,10 +15,10 @@ import { findPackageJson } from "./findPackageJson";
  *
  * Nothing here is a hard-coded list of framework packages, deliberately. Val
  * ships `@valbuild/language-server` inside whichever package a project depends
- * on directly — `@valbuild/next` today, `@valbuild/tanstackstart-react` next —
- * and a new one must work without an extension release. So the rule is inverted:
- * a small set of packages is known *never* to carry it, and everything else the
- * project depends on is assumed to.
+ * on directly — `@valbuild/next` for Next.js, `@valbuild/tanstack` for TanStack
+ * Start, and whatever framework comes next — and a new one must work without an
+ * extension release. So the rule is inverted: a small set of packages is known
+ * *never* to carry it, and everything else the project depends on is assumed to.
  */
 
 /**

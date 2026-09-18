@@ -6,10 +6,13 @@ import {
   EXTENSION_ID,
   hasOldValFixture,
   hasRealValFixture,
+  hasTanstackFixture,
   noValRoot,
   oldValRoot,
   openDocument,
   realValRoot,
+  tanstackValRoot,
+  waitForRunningSession,
   waitForValDiagnostics,
 } from "./helper";
 
@@ -23,7 +26,7 @@ import {
  * server's own commands are reachable, whether a server is resolved and started
  * per Val root, and whether its diagnostics arrive in the editor.
  *
- * The workspace has three Val roots in deliberately different states, so one
+ * The workspace has four Val roots in deliberately different states, so one
  * run exercises every branch of resolution at once:
  *
  *  - `fixtures/no-val`   — a package.json and a val.config, no `@valbuild/*` at
@@ -34,6 +37,13 @@ import {
  *                          on a current Val on purpose: a Val old enough to
  *                          announce no `workspace/executeCommand` names hid the
  *                          command collision that broke 1.1.0 entirely.
+ *  - `fixtures/tanstack` — the happy path on a *different framework*: a TanStack
+ *                          Start project on `@valbuild/tanstack`, installed with
+ *                          pnpm. Nothing in it depends on `@valbuild/next`, and
+ *                          under pnpm's isolated `node_modules` the server is
+ *                          reachable only through the package that ships it — so
+ *                          a launcher that were quietly a Next.js launcher would
+ *                          leave this root with no session at all.
  */
 suite("Language server launcher", () => {
   suiteSetup(async () => {
@@ -124,7 +134,7 @@ suite("Language server launcher", () => {
     assert.ok(report, "the command returned nothing");
     // Root detection is per-package, and a monorepo with several Val roots is
     // the case that needs a server each.
-    for (const root of [/no-val/, /old-val/, /npm/]) {
+    for (const root of [/no-val/, /old-val/, /npm/, /tanstack/]) {
       assert.match(
         report,
         new RegExp(`Val roots in workspace: .*${root.source}`),
@@ -176,17 +186,20 @@ suite("Language server launcher", () => {
       // The happy path, end to end, against the published
       // @valbuild/language-server: resolve it out of the project's node_modules,
       // launch it, negotiate, and read back what it says it can do.
-      const report = await vscode.commands.executeCommand<string>(
-        "valBuild.showLanguageServerInfo",
-      );
-      assert.ok(report, "the command returned nothing");
-      const marker = `--- ${realValRoot()} ---`;
-      assert.ok(report.includes(marker), `no npm section in:\n${report}`);
-      const section = report.slice(report.indexOf(marker));
+      const section = await waitForRunningSession(realValRoot());
+      assert.ok(section, "no npm section in the report");
       assert.match(section, /state: +running/);
       assert.match(section, /protocol version: 1/);
       assert.match(section, /features: .*diagnostics/);
       assert.match(section, /override: +none/);
+      // `npm` is the FIRST root in the report — the roots are ordered shortest
+      // path first — so this is also what proves the section is bounded at the
+      // next one. Read to the end of the report instead and every assertion
+      // above could be satisfied by a different root's session.
+      assert.ok(
+        !section.includes(`--- ${tanstackValRoot()} ---`),
+        `the npm section ran into a later root:\n${section}`,
+      );
     },
   );
 
@@ -198,8 +211,9 @@ suite("Language server launcher", () => {
       // is the symptom that reached us when the handshake did not finish, since a
       // client that fails to initialize also never sends `textDocument/didOpen`.
       //
-      // `content/errors.val.ts` is a plain string one character short of its
-      // schema, which every Val old enough to ship a language server reports.
+      // `content/errors.val.ts` is a plain string well under its schema's
+      // minimum length, which every Val old enough to ship a language server
+      // reports.
       const document = await openDocument(
         realValRoot(),
         "content/errors.val.ts",
@@ -260,6 +274,47 @@ suite("Language server launcher", () => {
           vscode.ConfigurationTarget.Workspace,
         );
       }
+    },
+  );
+
+  (hasTanstackFixture() ? test : test.skip)(
+    "starts a server for a TanStack Start root, with no @valbuild/next in sight",
+    async () => {
+      // The smoke test for "does this extension work with TanStack too". The
+      // fixture declares @valbuild/core and @valbuild/tanstack and nothing else,
+      // so the only reason there is a language server anywhere in its tree is
+      // that @valbuild/tanstack ships one — and the only reason the launcher
+      // finds it is that the anchors come from the project's own package.json
+      // rather than from a list of framework packages baked into the extension.
+      const section = await waitForRunningSession(tanstackValRoot());
+      assert.ok(section, `no tanstack section in the report`);
+      assert.match(section, /state: +running/);
+      assert.match(section, /protocol version: 1/);
+      assert.match(section, /features: .*diagnostics/);
+      // The package the version was read off is the framework package, not
+      // @valbuild/core — which this fixture also declares directly, and which
+      // can never carry a server.
+      assert.match(section, /Val version: +[\d.]+ \(from @valbuild\/tanstack\)/);
+      assert.match(section, /override: +none/);
+    },
+  );
+
+  (hasTanstackFixture() ? test : test.skip)(
+    "the TanStack project's diagnostics reach the editor",
+    async () => {
+      // As for `npm`: "it starts" is not "it works". A Val module in a project
+      // whose `initVal` comes from @valbuild/tanstack has to be evaluated by the
+      // server that shipped with it, and that evaluation is what a user sees.
+      const document = await openDocument(
+        tanstackValRoot(),
+        "src/content/errors.val.ts",
+      );
+      const diagnostics = await waitForValDiagnostics(document.uri);
+      assert.ok(
+        diagnostics.length > 0,
+        "the language server published no diagnostics for a module that has an error",
+      );
+      assert.match(diagnostics[0].message, /at least 30 characters/);
     },
   );
 

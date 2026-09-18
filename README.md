@@ -58,7 +58,7 @@ project already depends on:
 | If your project is | The package that carries it |
 | ------------------ | --------------------------- |
 | Next.js            | `@valbuild/next`            |
-| TanStack Start     | `@valbuild/tanstackstart-react` |
+| TanStack Start     | `@valbuild/tanstack`        |
 | Anything else      | `@valbuild/cli`             |
 
 So if the extension reports that the language server could not be resolved,

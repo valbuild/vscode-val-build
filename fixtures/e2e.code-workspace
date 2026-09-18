@@ -1,9 +1,10 @@
 {
-  "//": "Three Val roots in one workspace, in deliberately different states: `no-val` has no @valbuild/* anywhere above it (must stay silent), `old-val` is on a Val that predates the language server (must get the upgrade message, never a bare 'not found'), and `npm` is on a current Val (must get a running project server, and is the root whose server announces `workspace/executeCommand` names). Used by scripts/e2e.sh. All live outside client/ on purpose — Node resolution walks up, and a fixture nested under client/ would find the extension's own @valbuild/language-server devDependency.",
+  "//": "Four Val roots in one workspace, in deliberately different states: `no-val` has no @valbuild/* anywhere above it (must stay silent), `old-val` is on a Val that predates the language server (must get the upgrade message, never a bare 'not found'), `npm` is on a current Val (must get a running project server, and is the root whose server announces `workspace/executeCommand` names), and `tanstack` is a TanStack Start project installed with pnpm (must get a running server too — resolved through @valbuild/tanstack, since nothing in it has heard of @valbuild/next). Used by scripts/e2e.sh. All live outside client/ on purpose — Node resolution walks up, and a fixture nested under client/ would find the extension's own @valbuild/language-server devDependency.",
   "folders": [
     { "path": "no-val" },
     { "path": "old-val" },
-    { "path": "npm" }
+    { "path": "npm" },
+    { "path": "tanstack" }
   ],
   "settings": {
   }

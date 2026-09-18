@@ -81,6 +81,56 @@ export async function waitForValDiagnostics(
   }
 }
 
+/**
+ * The `showLanguageServerInfo` section for `valRoot`, once its session has
+ * reached `running`.
+ *
+ * Polled rather than read once. A session starts asynchronously, and anything
+ * that changes `valBuild.*` configuration restarts every one of them — so
+ * whether a given root is `running` at the moment a test asks depends on which
+ * tests ran before it, which is not something a test should be asserting on.
+ * Returns the section as it last looked if the deadline passes, so the failure
+ * names the state it was actually in.
+ */
+export async function waitForRunningSession(
+  valRoot: string,
+  timeoutMs = 30000,
+): Promise<string> {
+  const marker = `--- ${valRoot} ---`;
+  const deadline = Date.now() + timeoutMs;
+  let section = "";
+  for (;;) {
+    const report = await vscode.commands.executeCommand<string>(
+      "valBuild.showLanguageServerInfo",
+    );
+    if (report && report.includes(marker)) {
+      section = sectionFor(report, marker);
+      if (/state: +running/.test(section)) {
+        return section;
+      }
+    }
+    if (Date.now() > deadline) {
+      return section;
+    }
+    await sleep(250);
+  }
+}
+
+/**
+ * One root's section of the report, bounded at the next root.
+ *
+ * Slicing to the end of the report would let a LATER session's `state: running`
+ * answer for this one — so a root that is still starting, or that failed, reads
+ * as running as long as something below it is up. `fixtures/tanstack` happens to
+ * sort last today, which is exactly the kind of accident that stops being true
+ * when someone adds a fixture.
+ */
+function sectionFor(report: string, marker: string): string {
+  const start = report.indexOf(marker);
+  const next = report.indexOf("\n--- ", start + marker.length);
+  return next === -1 ? report.slice(start) : report.slice(start, next);
+}
+
 export const getDocPath = (p: string): string =>
   path.resolve(__dirname, "../../../fixtures/no-val", p);
 
@@ -100,6 +150,17 @@ export const realValRoot = (): string =>
   path.resolve(__dirname, "../../../fixtures/npm");
 
 /**
+ * The TanStack Start root in the workspace: `fixtures/tanstack`.
+ *
+ * A real project on `@valbuild/tanstack`, installed with pnpm. It is in the
+ * workspace so one run proves the launcher is not a Next.js launcher: the
+ * language server ships inside whichever package a project depends on directly,
+ * and nothing in this fixture has heard of `@valbuild/next`.
+ */
+export const tanstackValRoot = (): string =>
+  path.resolve(__dirname, "../../../fixtures/tanstack");
+
+/**
  * Whether the real-Val fixture has been installed.
  *
  * Its `node_modules` is not committed (`npm run install-fixtures` creates it),
@@ -116,6 +177,19 @@ export function hasRealValFixture(): boolean {
 export function hasOldValFixture(): boolean {
   return fs.existsSync(
     path.join(oldValRoot(), "node_modules", "@valbuild", "next"),
+  );
+}
+
+/**
+ * Whether the TanStack fixture has been installed.
+ *
+ * Checked on `@valbuild/tanstack` rather than on the language server: under
+ * pnpm's isolated layout the server is deliberately *not* at the project root,
+ * which is the whole reason this fixture uses pnpm.
+ */
+export function hasTanstackFixture(): boolean {
+  return fs.existsSync(
+    path.join(tanstackValRoot(), "node_modules", "@valbuild", "tanstack"),
   );
 }
 

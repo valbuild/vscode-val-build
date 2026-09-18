@@ -97,7 +97,7 @@ export function diagnoseLanguageServer({
       message:
         `${VAL_LANGUAGE_SERVER} could not be resolved from this project. ` +
         `It ships inside Val's framework and CLI packages — @valbuild/next for Next.js, ` +
-        `@valbuild/tanstackstart-react for TanStack Start, or @valbuild/cli for any project. ` +
+        `@valbuild/tanstack for TanStack Start, or @valbuild/cli for any project. ` +
         `This project has ${detected.packageName} ${detected.version} but none of those.`,
       actions: [
         {
